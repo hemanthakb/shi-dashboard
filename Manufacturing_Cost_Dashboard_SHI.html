@@ -811,14 +811,27 @@ function renderAlerts(rows,c){
       });
     }
   }
-  const isl=SD.line_totals['ISL'];
-  if(isl&&isl.actual_cost>isl.planned_cost)
-    alerts.push({t:'red',i:'🔴',title:`ISL Labour Overrun — LKR ${Math.round(isl.actual_cost-isl.planned_cost).toLocaleString()}`,body:'Incense Sticks Line: actual 5,254 hrs vs planned 4,440 hrs (+18.3%). Review worker allocation.'});
-  const bsl=SD.line_totals['BSL'];
-  if(bsl&&bsl.actual_cost>bsl.planned_cost*1.5)
-    alerts.push({t:'red',i:'🔴',title:`BSL Labour Cost ${pct(bsl.actual_cost,bsl.planned_cost)}% of plan`,body:`Budget Soap Line: LKR ${Math.round(bsl.actual_cost).toLocaleString()} vs planned LKR ${Math.round(bsl.planned_cost).toLocaleString()}.`});
+  // Live allocation alerts
+  if(allocData&&allocData.filesFound>0&&allocData.lineTotals) {
+    const lt=allocData.lineTotals;
+    const getH=v=>typeof v==='object'?v.hours:v;
+    // Check for lines with very high hours
+    Object.entries(lt).forEach(([line,data])=>{
+      const hrs=getH(data);
+      if(hrs>200) alerts.push({t:'amber',i:'⚠️',
+        title:`High hours on ${line} — ${hrs.toFixed(1)} hrs for period`,
+        body:`Total allocated hours for selected period. Review if this matches production plan.`});
+    });
+  }
+  // Maintenance alert
   if(c.maintBreakdown>c.maintPreventive&&c.maintCost>0)
     alerts.push({t:'amber',i:'⚠️',title:'Breakdown repairs exceeding preventive maintenance spend',body:`Breakdown/corrective: ${fmt(c.maintBreakdown)} vs preventive: ${fmt(c.maintPreventive)}. Review PM schedule.`});
+  // Historical DB alerts (only show if no live data)
+  if(!allocData||allocData.filesFound===0) {
+    const isl=SD.line_totals['ISL'];
+    if(isl&&isl.actual_cost>isl.planned_cost)
+      alerts.push({t:'amber',i:'📋',title:`ISL Historical Overrun (Jan–Mar 2026) — LKR ${Math.round(isl.actual_cost-isl.planned_cost).toLocaleString()}`,body:'Incense Sticks Line: actual 5,254 hrs vs planned 4,440 hrs (+18.3%). Historical reference only.'});
+  }
   if(!alerts.length)
     alerts.push({t:'green',i:'✅',title:'No critical cost alerts for selected period',body:'All monitored metrics within acceptable range.'});
   $('alert-zone').innerHTML=alerts.map(a=>`<div class="abar ${a.t}"><span class="aicon">${a.i}</span><div><div class="atitle">${a.title}</div><div class="abody">${a.body}</div></div></div>`).join('');
@@ -864,16 +877,37 @@ function renderMix(c){
 
 // ── RENDER LABOUR SECTION ─────────────────────────────────────────────────────
 function renderLabour(c){
-  // Labour KPI stream cards
-  const ot=SD.ot_summary,hr=SD.avg_blended;
-  const nh=allocData?Math.min(allocData.totalHours,(allocData.employees||45)*(allocData.filesFound||1)*8):SD.employee_count*25*8;
-  const oh=allocData?Math.max(0,allocData.totalHours-nh):ot.weekday+ot.saturday;
-  const dh=ot.sunday_dot;
-  $('labour-kpis').innerHTML=`
-    <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(nh*hr)}</div><div class="ksub">${nh.toFixed(1)} hrs · Rate 1.0×</div></div>
-    <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(oh*hr*1.5)}</div><div class="ksub">${oh.toFixed(1)} hrs above capacity</div></div>
-    <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Double OT Cost (2×)</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(dh*hr*2)}</div><div class="ksub">${dh} hrs · Sun/PH · from payroll</div></div>
-    <div class="stream-card" style="border-top-color:var(--teal)"><div class="klbl">Labour Cost / kg</div><div class="kval" style="font-size:18px;color:var(--teal)">${fmtKg(c.labPerKg)}</div><div class="ksub">Based on ${Math.round(c.totalKg).toLocaleString()} kg produced</div></div>`;
+  // Labour KPI stream cards — use live allocation data if available
+  const hr = EMPLOYMENT_RATES.blendedHr;
+  const otHr  = EMPLOYMENT_RATES.helper.otHr;
+  const dotHr = EMPLOYMENT_RATES.helper.dotHr;
+
+  if(allocData && allocData.filesFound > 0) {
+    // Live data from ERP allocation
+    const totalHrs = allocData.totalHours;
+    const days     = allocData.filesFound;
+    const emps     = allocData.employees;
+    const normalCap= emps * days * 8;
+    const normHrs  = Math.min(totalHrs, normalCap);
+    const otHrs    = Math.max(0, totalHrs - normalCap);
+    const normCost = normHrs * hr;
+    const otCost   = otHrs * hr * 1.5;
+    const labTotal = allocData.totalCost || (totalHrs * hr);
+    const src = `${days} day(s) · ${emps} employees · ERP`;
+
+    $('labour-kpis').innerHTML=`
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(normCost)}</div><div class="ksub">${normHrs.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otCost)}</div><div class="ksub">${otHrs.toFixed(1)} hrs above normal capacity</div></div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>
+      <div class="stream-card" style="border-top-color:var(--teal)"><div class="klbl">Labour Cost / kg</div><div class="kval" style="font-size:18px;color:var(--teal)">${fmtKg(c.labPerKg)}</div><div class="ksub">Based on ${Math.round(c.totalKg).toLocaleString()} kg produced</div></div>`;
+  } else {
+    // No live data — show placeholder
+    $('labour-kpis').innerHTML=`
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
+      <div class="stream-card" style="border-top-color:var(--teal)"><div class="klbl">Labour Cost / kg</div><div class="kval" style="font-size:18px;color:var(--teal)">${fmtKg(c.labPerKg)}</div><div class="ksub">Based on ${Math.round(c.totalKg).toLocaleString()} kg produced</div></div>`;
+  }
 
   // Alloc chart
   if(charts.alloc)charts.alloc.destroy();
@@ -881,7 +915,7 @@ function renderLabour(c){
   const getH=v=>typeof v==='object'?v.hours:v;
   const a={};Object.keys(rawA).forEach(k=>{a[k]=getH(rawA[k]);});
   const from=$('f-from').value,to=$('f-to').value;
-  const sub=allocData?`${from} to ${to} · ${allocData.filesFound} day(s) · ${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs`:'ERP sample (2 Jun 2026)';
+  const sub=allocData&&allocData.filesFound>0?`${from} to ${to} · ${allocData.filesFound} day(s) · ${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs · LKR ${Math.round(allocData.totalCost||0).toLocaleString()}`:'No Labour Allocation data — connect ERP';
   const lines=Object.keys(a).sort((x,y)=>a[y]-a[x]);
   const costs=lines.map(l=>Math.round(a[l]*SD.avg_blended));
   const subEl=$('alloc-sub');if(subEl)subEl.textContent=sub;
@@ -1072,7 +1106,7 @@ function updateTS(){const el=$('ts');if(el)el.innerHTML=`<span style="color:var(
 // ── REFRESH ───────────────────────────────────────────────────────────────────
 let countVal=60,countTimer;
 function startCountdown(){
-  clearInterval(countTimer);countVal=60;
+  clearInterval(countTimer);countVal=300;
   const el=$('countdown');if(el)el.textContent=countVal;
   countTimer=setInterval(async()=>{countVal--;const el=$('countdown');if(el)el.textContent=countVal;if(countVal<=0)await autoRefresh();},1000);
 }
