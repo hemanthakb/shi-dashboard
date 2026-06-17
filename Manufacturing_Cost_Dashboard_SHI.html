@@ -581,7 +581,17 @@ async function connectAll(){
 
   // Build status
   const parts=[];
-  if(waData&&waData.filesFound>0)parts.push(`✅ Labour: ${waData.filesFound} day(s) · ${waData.totalHours.toFixed(1)}h`);
+  if(waData) {
+    // Always count Labour as connected if Web App responded
+    if(waData.filesFound>0) {
+      parts.push(`✅ Labour: ${waData.filesFound} day(s) · ${waData.totalHours.toFixed(1)}h · LKR ${Math.round(waData.totalCost).toLocaleString()}`);
+    } else if(waData.availableDates&&waData.availableDates.length>0) {
+      // Web App connected but no files for THIS date range - still count as connected
+      parts.push(`⚠️ Labour: no files for range · Available: ${waData.availableDates.join(', ')}`);
+    } else {
+      parts.push(`✅ Labour: connected (no files yet in folder)`);
+    }
+  }
   if(engRows.length>0)parts.push(`✅ Maintenance: ${engData.length} entries`);
   if(elecDRows.length>0)parts.push(`✅ Electricity: ${elecDaily.length} daily records`);
   if(elecBRows.length>0)parts.push(`✅ Bills: ${elecBRows.length} months`);
@@ -605,6 +615,7 @@ async function connectAll(){
     if(btn){btn.textContent='🔌 Connect All';btn.disabled=false;btn.style.background='';}
   }
 
+  // Always render - even if some sources have no data for selected range
   renderAll();
 }
 
@@ -785,8 +796,21 @@ function renderAlerts(rows,c){
   const alerts=[];
   if(!allocData&&engData.length===0&&elecDaily.length===0)
     alerts.push({t:'blue',i:'ℹ️',title:'No live data connected yet',body:'Click 🔌 Connect All to load Labour Allocation, Maintenance and Electricity data for the selected date range.'});
-  if(allocData&&allocData.filesFound===0)
-    alerts.push({t:'amber',i:'⚠️',title:'No Labour Allocation files for selected dates',body:`Available dates: ${(allocData.availableDates||[]).join(', ')||'none'}. Upload DD.MM.YY Labor Allocation.xlsx to your Drive folder.`});
+  if(allocData&&allocData.filesFound===0) {
+    const avail = (allocData.availableDates||[]);
+    const inRange = avail.filter(d=>d>=$('f-from').value&&d<=$('f-to').value);
+    if(avail.length>0) {
+      alerts.push({t:'amber',i:'⚠️',
+        title:'No Labour Allocation files for selected dates',
+        body:`No files found for selected range. Available dates in folder: ${avail.join(', ')}. Adjust date range to match available files.`
+      });
+    } else {
+      alerts.push({t:'amber',i:'⚠️',
+        title:'No Labour Allocation files found in Drive folder',
+        body:'Upload DD.MM.YY Labor Allocation.xlsx files to your Drive folder to see labour costs.'
+      });
+    }
+  }
   const isl=SD.line_totals['ISL'];
   if(isl&&isl.actual_cost>isl.planned_cost)
     alerts.push({t:'red',i:'🔴',title:`ISL Labour Overrun — LKR ${Math.round(isl.actual_cost-isl.planned_cost).toLocaleString()}`,body:'Incense Sticks Line: actual 5,254 hrs vs planned 4,440 hrs (+18.3%). Review worker allocation.'});
