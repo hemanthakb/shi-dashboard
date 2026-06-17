@@ -469,19 +469,38 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const LM={'PRL':'Pan Room Line','BSL':'Budget Soap Line','DFL':'Dishwash Finishing Line','DPML':'Detergent Powder Mixing Line','DPPL':'Detergent Powder Packing Line','FSL':'Finishing Soap Line','ISL':'Incense Sticks Line','LBML':'Liquid Batch Mixing Line','LPSL':'Liquid Packing Sachet Line','TBCPL':'Toilet Bowl Cleaner Packing Line','AFPL':'Air Freshener Packing Line','GCPL':'Glass Cleaner Packing Line','BPL':'Bleaching Powder Line','CPL':'Cleaning Powder Line','BLPL':'Bleaching Liquid Packing Line','SBLPL':'Star Blue Liquid Packing Line','HWLPL':'Hand Wash Liquid Packing Line','DLPL':'Dishwash Liquid Packing Line','LLPL':'Laundry Liquid Packing Line','DPL':'Disinfectants Packing Line','FSBPL':'Fabric Softener Bottle Packing Line','PCL':'Price Coding Line','CRWL':'Chemical Room Weighing Line','FGL':'Factory General Line','PARL':'Promotion and Reworks Line','BPKL':'Blister Packing Line'};
 const LC=['#1a5fa8','#0d7a6b','#b8860b','#c0392b','#5b3fa0','#1a7a3c','#e8a000','#a05e00','#2980b9','#16a085','#8e44ad','#27ae60','#d35400','#7f8c8d','#1abc9c','#e74c3c','#2c3e50'];
-const SD={"avg_blended":150.56,"employee_count":45,"prod_record_count":596,"ot_summary":{"weekday":1926,"saturday":820,"sunday_dot":190},"daily_totals":[{"date":"2026-01-05","pc":10861,"ac":6775,"pcs_p":176.9,"pcs_a":34.0,"kg_a":510},{"date":"2026-01-06","pc":7198,"ac":8431,"pcs_p":230.8,"pcs_a":70.0,"kg_a":1050},{"date":"2026-01-07","pc":24165,"ac":16411,"pcs_p":429.2,"pcs_a":108.2,"kg_a":1623},{"date":"2026-01-08","pc":25704,"ac":21681,"pcs_p":374.5,"pcs_a":130.1,"kg_a":1952},{"date":"2026-01-09","pc":14749,"ac":19874,"pcs_p":179.6,"pcs_a":138.7,"kg_a":2081},{"date":"2026-01-10","pc":22939,"ac":16664,"pcs_p":322.2,"pcs_a":112.5,"kg_a":1688},{"date":"2026-01-12","pc":43571,"ac":53060,"pcs_p":543.6,"pcs_a":230.8,"kg_a":3462},{"date":"2026-01-13","pc":7829,"ac":13061,"pcs_p":116.0,"pcs_a":267.6,"kg_a":4014},{"date":"2026-01-14","pc":27581,"ac":28886,"pcs_p":560.1,"pcs_a":252.2,"kg_a":3783},{"date":"2026-01-16","pc":22679,"ac":27059,"pcs_p":362.8,"pcs_a":321.7,"kg_a":4826},{"date":"2026-01-17","pc":15435,"ac":7102,"pcs_p":302.2,"pcs_a":54.0,"kg_a":810},{"date":"2026-01-19","pc":11187,"ac":4052,"pcs_p":272.5,"pcs_a":51.0,"kg_a":765},{"date":"2026-01-20","pc":10619,"ac":8659,"pcs_p":235.0,"pcs_a":88.3,"kg_a":1325},{"date":"2026-01-21","pc":9190,"ac":7316,"pcs_p":248.4,"pcs_a":61.0,"kg_a":915},{"date":"2026-01-22","pc":15967,"ac":11745,"pcs_p":369.5,"pcs_a":100.8,"kg_a":1512},{"date":"2026-01-23","pc":23079,"ac":16401,"pcs_p":486.2,"pcs_a":149.7,"kg_a":2246},{"date":"2026-01-24","pc":33000,"ac":43349,"pcs_p":562.0,"pcs_a":289.6,"kg_a":4344},{"date":"2026-01-26","pc":16169,"ac":25217,"pcs_p":312.8,"pcs_a":161.6,"kg_a":2424},{"date":"2026-01-27","pc":23639,"ac":29701,"pcs_p":467.6,"pcs_a":204.6,"kg_a":3069},{"date":"2026-01-28","pc":18584,"ac":21932,"pcs_p":331.7,"pcs_a":121.8,"kg_a":1827},{"date":"2026-01-29","pc":565,"ac":188,"pcs_p":18.8,"pcs_a":5.0,"kg_a":75},{"date":"2026-01-30","pc":10655,"ac":6525,"pcs_p":247.5,"pcs_a":51.0,"kg_a":765},{"date":"2026-01-31","pc":24254,"ac":15121,"pcs_p":397.7,"pcs_a":338.8,"kg_a":5082},{"date":"2026-02-03","pc":1710,"ac":1719,"pcs_p":31.9,"pcs_a":12.0,"kg_a":180},{"date":"2026-02-05","pc":12951,"ac":21324,"pcs_p":201.6,"pcs_a":128.1,"kg_a":1922},{"date":"2026-02-06","pc":18764,"ac":24044,"pcs_p":355.4,"pcs_a":135.0,"kg_a":2025},{"date":"2026-02-07","pc":34350,"ac":46237,"pcs_p":710.6,"pcs_a":632.8,"kg_a":9492},{"date":"2026-02-09","pc":21366,"ac":40501,"pcs_p":411.7,"pcs_a":252.3,"kg_a":3785},{"date":"2026-02-10","pc":31208,"ac":32123,"pcs_p":616.3,"pcs_a":279.8,"kg_a":4197},{"date":"2026-02-11","pc":13419,"ac":14719,"pcs_p":286.0,"pcs_a":53.9,"kg_a":809},{"date":"2026-02-12","pc":9354,"ac":9908,"pcs_p":315.6,"pcs_a":66.8,"kg_a":1002},{"date":"2026-02-13","pc":18669,"ac":21342,"pcs_p":500.8,"pcs_a":145.2,"kg_a":2178},{"date":"2026-02-14","pc":4056,"ac":6096,"pcs_p":119.7,"pcs_a":30.0,"kg_a":450},{"date":"2026-02-16","pc":6179,"ac":7304,"pcs_p":114.4,"pcs_a":49.0,"kg_a":735},{"date":"2026-02-17","pc":20681,"ac":22033,"pcs_p":330.5,"pcs_a":231.8,"kg_a":3477},{"date":"2026-02-18","pc":41229,"ac":28602,"pcs_p":686.1,"pcs_a":187.9,"kg_a":2819},{"date":"2026-02-19","pc":24913,"ac":24213,"pcs_p":418.0,"pcs_a":310.4,"kg_a":4656},{"date":"2026-02-20","pc":20975,"ac":14595,"pcs_p":384.9,"pcs_a":101.3,"kg_a":1520},{"date":"2026-02-21","pc":24172,"ac":27077,"pcs_p":557.4,"pcs_a":278.6,"kg_a":4179},{"date":"2026-02-23","pc":10934,"ac":8237,"pcs_p":215.7,"pcs_a":21.5,"kg_a":323},{"date":"2026-02-24","pc":13346,"ac":15235,"pcs_p":276.9,"pcs_a":112.0,"kg_a":1680},{"date":"2026-02-25","pc":25110,"ac":21230,"pcs_p":420.5,"pcs_a":167.8,"kg_a":2517},{"date":"2026-02-27","pc":16542,"ac":23948,"pcs_p":366.6,"pcs_a":249.1,"kg_a":3737},{"date":"2026-02-28","pc":25278,"ac":34130,"pcs_p":534.1,"pcs_a":206.5,"kg_a":3098},{"date":"2026-03-04","pc":17608,"ac":20279,"pcs_p":309.1,"pcs_a":244.8,"kg_a":3672},{"date":"2026-03-05","pc":15189,"ac":15080,"pcs_p":351.0,"pcs_a":202.0,"kg_a":3030},{"date":"2026-03-06","pc":5326,"ac":8573,"pcs_p":117.2,"pcs_a":75.0,"kg_a":1125},{"date":"2026-03-07","pc":45093,"ac":37312,"pcs_p":859.1,"pcs_a":811.6,"kg_a":12174},{"date":"2026-03-09","pc":27940,"ac":28682,"pcs_p":575.6,"pcs_a":344.0,"kg_a":5160},{"date":"2026-03-10","pc":24530,"ac":22051,"pcs_p":559.0,"pcs_a":159.2,"kg_a":2388},{"date":"2026-03-11","pc":51311,"ac":39484,"pcs_p":1276.1,"pcs_a":520.1,"kg_a":7802},{"date":"2026-03-12","pc":49168,"ac":51115,"pcs_p":1036.1,"pcs_a":646.0,"kg_a":9690},{"date":"2026-03-13","pc":50400,"ac":49977,"pcs_p":978.5,"pcs_a":603.7,"kg_a":9056},{"date":"2026-03-14","pc":67507,"ac":61052,"pcs_p":1421.4,"pcs_a":810.0,"kg_a":12150},{"date":"2026-03-16","pc":35493,"ac":42533,"pcs_p":623.6,"pcs_a":382.4,"kg_a":5736},{"date":"2026-03-17","pc":52779,"ac":53524,"pcs_p":1009.6,"pcs_a":634.2,"kg_a":9513},{"date":"2026-03-18","pc":64623,"ac":60962,"pcs_p":1436.9,"pcs_a":712.2,"kg_a":10683},{"date":"2026-03-19","pc":54390,"ac":50513,"pcs_p":1157.5,"pcs_a":562.7,"kg_a":8441},{"date":"2026-03-20","pc":39861,"ac":42119,"pcs_p":693.8,"pcs_a":366.0,"kg_a":5490},{"date":"2026-03-21","pc":63988,"ac":62669,"pcs_p":1515.9,"pcs_a":914.4,"kg_a":13716},{"date":"2026-03-23","pc":48312,"ac":49769,"pcs_p":946.2,"pcs_a":589.8,"kg_a":8847},{"date":"2026-03-24","pc":24780,"ac":28382,"pcs_p":724.3,"pcs_a":432.0,"kg_a":6480},{"date":"2026-03-25","pc":40062,"ac":47426,"pcs_p":964.3,"pcs_a":630.0,"kg_a":9450},{"date":"2026-03-26","pc":40526,"ac":37565,"pcs_p":871.8,"pcs_a":581.1,"kg_a":8717},{"date":"2026-03-27","pc":26248,"ac":20326,"pcs_p":453.6,"pcs_a":239.0,"kg_a":3585},{"date":"2026-03-28","pc":49848,"ac":49712,"pcs_p":1369.2,"pcs_a":768.3,"kg_a":11525}],"line_totals":{"BLPL":{"planned_cost":70367,"actual_cost":85420,"planned_cs":1828,"actual_cs":736,"planned_hrs":467,"actual_hrs":567,"active_days":22},"BPL":{"planned_cost":0,"actual_cost":3764,"planned_cs":0,"actual_cs":19,"planned_hrs":0,"actual_hrs":25,"active_days":1},"BSL":{"planned_cost":58738,"actual_cost":110990,"planned_cs":1815,"actual_cs":1135,"planned_hrs":390,"actual_hrs":737,"active_days":22},"DFL":{"planned_cost":118842,"actual_cost":122907,"planned_cs":2174,"actual_cs":1114,"planned_hrs":789,"actual_hrs":816,"active_days":12},"DLPL":{"planned_cost":12334,"actual_cost":11843,"planned_cs":308,"actual_cs":96,"planned_hrs":82,"actual_hrs":79,"active_days":5},"DPL":{"planned_cost":2764,"actual_cost":1807,"planned_cs":60,"actual_cs":8,"planned_hrs":18,"actual_hrs":12,"active_days":2},"DPPL":{"planned_cost":63967,"actual_cost":77054,"planned_cs":3070,"actual_cs":1747,"planned_hrs":425,"actual_hrs":512,"active_days":13},"FSBPL":{"planned_cost":88918,"actual_cost":89195,"planned_cs":2450,"actual_cs":1086,"planned_hrs":591,"actual_hrs":592,"active_days":21},"FSL":{"planned_cost":40115,"actual_cost":37839,"planned_cs":497,"actual_cs":246,"planned_hrs":266,"actual_hrs":251,"active_days":13},"GCPL":{"planned_cost":1019,"actual_cost":2484,"planned_cs":34,"actual_cs":20,"planned_hrs":7,"actual_hrs":16,"active_days":3},"HWLPL":{"planned_cost":4089,"actual_cost":5170,"planned_cs":129,"actual_cs":50,"planned_hrs":27,"actual_hrs":34,"active_days":2},"ISL":{"planned_cost":668512,"actual_cost":791078,"planned_cs":9911,"actual_cs":7616,"planned_hrs":4440,"actual_hrs":5254,"active_days":48},"LLPL":{"planned_cost":19653,"actual_cost":16084,"planned_cs":435,"actual_cs":765,"planned_hrs":131,"actual_hrs":107,"active_days":11},"LPSL":{"planned_cost":80060,"actual_cost":87950,"planned_cs":1914,"actual_cs":1495,"planned_hrs":532,"actual_hrs":584,"active_days":11},"PARL":{"planned_cost":457805,"actual_cost":265812,"planned_cs":9527,"actual_cs":1804,"planned_hrs":3041,"actual_hrs":1765,"active_days":57},"SBLPL":{"planned_cost":14201,"actual_cost":14966,"planned_cs":280,"actual_cs":78,"planned_hrs":94,"actual_hrs":99,"active_days":5},"TBCPL":{"planned_cost":8422,"actual_cost":8571,"planned_cs":220,"actual_cs":207,"planned_hrs":56,"actual_hrs":57,"active_days":5}},"alloc_by_line":{"Detergent Powder Mixing Line":65.0,"Finishing Soap Line":35.83,"Liquid Batch":71.93,"Promotions and Reworks Line":56.64,"Incense Sticks Line":61.0,"Liquid Packaging":35.83,"Dishwash Finishing Line":87.0,"Detergent Powder Packing Line":18.91,"Budget Soap Line":25.5,"Laundry Liquid Packing Line":18.0}};
+const SD={"avg_blended":256.20,"employee_count":45,"prod_record_count":596,"ot_summary":{"weekday":1926,"saturday":820,"sunday_dot":190},"daily_totals":[{"date":"2026-01-05","pc":10861,"ac":6775,"pcs_p":176.9,"pcs_a":34.0,"kg_a":510},{"date":"2026-01-06","pc":7198,"ac":8431,"pcs_p":230.8,"pcs_a":70.0,"kg_a":1050},{"date":"2026-01-07","pc":24165,"ac":16411,"pcs_p":429.2,"pcs_a":108.2,"kg_a":1623},{"date":"2026-01-08","pc":25704,"ac":21681,"pcs_p":374.5,"pcs_a":130.1,"kg_a":1952},{"date":"2026-01-09","pc":14749,"ac":19874,"pcs_p":179.6,"pcs_a":138.7,"kg_a":2081},{"date":"2026-01-10","pc":22939,"ac":16664,"pcs_p":322.2,"pcs_a":112.5,"kg_a":1688},{"date":"2026-01-12","pc":43571,"ac":53060,"pcs_p":543.6,"pcs_a":230.8,"kg_a":3462},{"date":"2026-01-13","pc":7829,"ac":13061,"pcs_p":116.0,"pcs_a":267.6,"kg_a":4014},{"date":"2026-01-14","pc":27581,"ac":28886,"pcs_p":560.1,"pcs_a":252.2,"kg_a":3783},{"date":"2026-01-16","pc":22679,"ac":27059,"pcs_p":362.8,"pcs_a":321.7,"kg_a":4826},{"date":"2026-01-17","pc":15435,"ac":7102,"pcs_p":302.2,"pcs_a":54.0,"kg_a":810},{"date":"2026-01-19","pc":11187,"ac":4052,"pcs_p":272.5,"pcs_a":51.0,"kg_a":765},{"date":"2026-01-20","pc":10619,"ac":8659,"pcs_p":235.0,"pcs_a":88.3,"kg_a":1325},{"date":"2026-01-21","pc":9190,"ac":7316,"pcs_p":248.4,"pcs_a":61.0,"kg_a":915},{"date":"2026-01-22","pc":15967,"ac":11745,"pcs_p":369.5,"pcs_a":100.8,"kg_a":1512},{"date":"2026-01-23","pc":23079,"ac":16401,"pcs_p":486.2,"pcs_a":149.7,"kg_a":2246},{"date":"2026-01-24","pc":33000,"ac":43349,"pcs_p":562.0,"pcs_a":289.6,"kg_a":4344},{"date":"2026-01-26","pc":16169,"ac":25217,"pcs_p":312.8,"pcs_a":161.6,"kg_a":2424},{"date":"2026-01-27","pc":23639,"ac":29701,"pcs_p":467.6,"pcs_a":204.6,"kg_a":3069},{"date":"2026-01-28","pc":18584,"ac":21932,"pcs_p":331.7,"pcs_a":121.8,"kg_a":1827},{"date":"2026-01-29","pc":565,"ac":188,"pcs_p":18.8,"pcs_a":5.0,"kg_a":75},{"date":"2026-01-30","pc":10655,"ac":6525,"pcs_p":247.5,"pcs_a":51.0,"kg_a":765},{"date":"2026-01-31","pc":24254,"ac":15121,"pcs_p":397.7,"pcs_a":338.8,"kg_a":5082},{"date":"2026-02-03","pc":1710,"ac":1719,"pcs_p":31.9,"pcs_a":12.0,"kg_a":180},{"date":"2026-02-05","pc":12951,"ac":21324,"pcs_p":201.6,"pcs_a":128.1,"kg_a":1922},{"date":"2026-02-06","pc":18764,"ac":24044,"pcs_p":355.4,"pcs_a":135.0,"kg_a":2025},{"date":"2026-02-07","pc":34350,"ac":46237,"pcs_p":710.6,"pcs_a":632.8,"kg_a":9492},{"date":"2026-02-09","pc":21366,"ac":40501,"pcs_p":411.7,"pcs_a":252.3,"kg_a":3785},{"date":"2026-02-10","pc":31208,"ac":32123,"pcs_p":616.3,"pcs_a":279.8,"kg_a":4197},{"date":"2026-02-11","pc":13419,"ac":14719,"pcs_p":286.0,"pcs_a":53.9,"kg_a":809},{"date":"2026-02-12","pc":9354,"ac":9908,"pcs_p":315.6,"pcs_a":66.8,"kg_a":1002},{"date":"2026-02-13","pc":18669,"ac":21342,"pcs_p":500.8,"pcs_a":145.2,"kg_a":2178},{"date":"2026-02-14","pc":4056,"ac":6096,"pcs_p":119.7,"pcs_a":30.0,"kg_a":450},{"date":"2026-02-16","pc":6179,"ac":7304,"pcs_p":114.4,"pcs_a":49.0,"kg_a":735},{"date":"2026-02-17","pc":20681,"ac":22033,"pcs_p":330.5,"pcs_a":231.8,"kg_a":3477},{"date":"2026-02-18","pc":41229,"ac":28602,"pcs_p":686.1,"pcs_a":187.9,"kg_a":2819},{"date":"2026-02-19","pc":24913,"ac":24213,"pcs_p":418.0,"pcs_a":310.4,"kg_a":4656},{"date":"2026-02-20","pc":20975,"ac":14595,"pcs_p":384.9,"pcs_a":101.3,"kg_a":1520},{"date":"2026-02-21","pc":24172,"ac":27077,"pcs_p":557.4,"pcs_a":278.6,"kg_a":4179},{"date":"2026-02-23","pc":10934,"ac":8237,"pcs_p":215.7,"pcs_a":21.5,"kg_a":323},{"date":"2026-02-24","pc":13346,"ac":15235,"pcs_p":276.9,"pcs_a":112.0,"kg_a":1680},{"date":"2026-02-25","pc":25110,"ac":21230,"pcs_p":420.5,"pcs_a":167.8,"kg_a":2517},{"date":"2026-02-27","pc":16542,"ac":23948,"pcs_p":366.6,"pcs_a":249.1,"kg_a":3737},{"date":"2026-02-28","pc":25278,"ac":34130,"pcs_p":534.1,"pcs_a":206.5,"kg_a":3098},{"date":"2026-03-04","pc":17608,"ac":20279,"pcs_p":309.1,"pcs_a":244.8,"kg_a":3672},{"date":"2026-03-05","pc":15189,"ac":15080,"pcs_p":351.0,"pcs_a":202.0,"kg_a":3030},{"date":"2026-03-06","pc":5326,"ac":8573,"pcs_p":117.2,"pcs_a":75.0,"kg_a":1125},{"date":"2026-03-07","pc":45093,"ac":37312,"pcs_p":859.1,"pcs_a":811.6,"kg_a":12174},{"date":"2026-03-09","pc":27940,"ac":28682,"pcs_p":575.6,"pcs_a":344.0,"kg_a":5160},{"date":"2026-03-10","pc":24530,"ac":22051,"pcs_p":559.0,"pcs_a":159.2,"kg_a":2388},{"date":"2026-03-11","pc":51311,"ac":39484,"pcs_p":1276.1,"pcs_a":520.1,"kg_a":7802},{"date":"2026-03-12","pc":49168,"ac":51115,"pcs_p":1036.1,"pcs_a":646.0,"kg_a":9690},{"date":"2026-03-13","pc":50400,"ac":49977,"pcs_p":978.5,"pcs_a":603.7,"kg_a":9056},{"date":"2026-03-14","pc":67507,"ac":61052,"pcs_p":1421.4,"pcs_a":810.0,"kg_a":12150},{"date":"2026-03-16","pc":35493,"ac":42533,"pcs_p":623.6,"pcs_a":382.4,"kg_a":5736},{"date":"2026-03-17","pc":52779,"ac":53524,"pcs_p":1009.6,"pcs_a":634.2,"kg_a":9513},{"date":"2026-03-18","pc":64623,"ac":60962,"pcs_p":1436.9,"pcs_a":712.2,"kg_a":10683},{"date":"2026-03-19","pc":54390,"ac":50513,"pcs_p":1157.5,"pcs_a":562.7,"kg_a":8441},{"date":"2026-03-20","pc":39861,"ac":42119,"pcs_p":693.8,"pcs_a":366.0,"kg_a":5490},{"date":"2026-03-21","pc":63988,"ac":62669,"pcs_p":1515.9,"pcs_a":914.4,"kg_a":13716},{"date":"2026-03-23","pc":48312,"ac":49769,"pcs_p":946.2,"pcs_a":589.8,"kg_a":8847},{"date":"2026-03-24","pc":24780,"ac":28382,"pcs_p":724.3,"pcs_a":432.0,"kg_a":6480},{"date":"2026-03-25","pc":40062,"ac":47426,"pcs_p":964.3,"pcs_a":630.0,"kg_a":9450},{"date":"2026-03-26","pc":40526,"ac":37565,"pcs_p":871.8,"pcs_a":581.1,"kg_a":8717},{"date":"2026-03-27","pc":26248,"ac":20326,"pcs_p":453.6,"pcs_a":239.0,"kg_a":3585},{"date":"2026-03-28","pc":49848,"ac":49712,"pcs_p":1369.2,"pcs_a":768.3,"kg_a":11525}],"line_totals":{"BLPL":{"planned_cost":70367,"actual_cost":85420,"planned_cs":1828,"actual_cs":736,"planned_hrs":467,"actual_hrs":567,"active_days":22},"BPL":{"planned_cost":0,"actual_cost":3764,"planned_cs":0,"actual_cs":19,"planned_hrs":0,"actual_hrs":25,"active_days":1},"BSL":{"planned_cost":58738,"actual_cost":110990,"planned_cs":1815,"actual_cs":1135,"planned_hrs":390,"actual_hrs":737,"active_days":22},"DFL":{"planned_cost":118842,"actual_cost":122907,"planned_cs":2174,"actual_cs":1114,"planned_hrs":789,"actual_hrs":816,"active_days":12},"DLPL":{"planned_cost":12334,"actual_cost":11843,"planned_cs":308,"actual_cs":96,"planned_hrs":82,"actual_hrs":79,"active_days":5},"DPL":{"planned_cost":2764,"actual_cost":1807,"planned_cs":60,"actual_cs":8,"planned_hrs":18,"actual_hrs":12,"active_days":2},"DPPL":{"planned_cost":63967,"actual_cost":77054,"planned_cs":3070,"actual_cs":1747,"planned_hrs":425,"actual_hrs":512,"active_days":13},"FSBPL":{"planned_cost":88918,"actual_cost":89195,"planned_cs":2450,"actual_cs":1086,"planned_hrs":591,"actual_hrs":592,"active_days":21},"FSL":{"planned_cost":40115,"actual_cost":37839,"planned_cs":497,"actual_cs":246,"planned_hrs":266,"actual_hrs":251,"active_days":13},"GCPL":{"planned_cost":1019,"actual_cost":2484,"planned_cs":34,"actual_cs":20,"planned_hrs":7,"actual_hrs":16,"active_days":3},"HWLPL":{"planned_cost":4089,"actual_cost":5170,"planned_cs":129,"actual_cs":50,"planned_hrs":27,"actual_hrs":34,"active_days":2},"ISL":{"planned_cost":668512,"actual_cost":791078,"planned_cs":9911,"actual_cs":7616,"planned_hrs":4440,"actual_hrs":5254,"active_days":48},"LLPL":{"planned_cost":19653,"actual_cost":16084,"planned_cs":435,"actual_cs":765,"planned_hrs":131,"actual_hrs":107,"active_days":11},"LPSL":{"planned_cost":80060,"actual_cost":87950,"planned_cs":1914,"actual_cs":1495,"planned_hrs":532,"actual_hrs":584,"active_days":11},"PARL":{"planned_cost":457805,"actual_cost":265812,"planned_cs":9527,"actual_cs":1804,"planned_hrs":3041,"actual_hrs":1765,"active_days":57},"SBLPL":{"planned_cost":14201,"actual_cost":14966,"planned_cs":280,"actual_cs":78,"planned_hrs":94,"actual_hrs":99,"active_days":5},"TBCPL":{"planned_cost":8422,"actual_cost":8571,"planned_cs":220,"actual_cs":207,"planned_hrs":56,"actual_hrs":57,"active_days":5}},"alloc_by_line":{"Detergent Powder Mixing Line":65.0,"Finishing Soap Line":35.83,"Liquid Batch":71.93,"Promotions and Reworks Line":56.64,"Incense Sticks Line":61.0,"Liquid Packaging":35.83,"Dishwash Finishing Line":87.0,"Detergent Powder Packing Line":18.91,"Budget Soap Line":25.5,"Laundry Liquid Packing Line":18.0}};
 
 // ── DATA SOURCE URLs (hardcoded — update here if URLs change) ────────────────
 const URLS = {
-  labour:   'https://script.google.com/macros/s/AKfycbzZ0MCT_yPBDbPq-1cx9_wXwVFA1IgI_r9VmeAW6ZCvv8SqoF9zk5JWi2inMiWvqMD1/exec',
-  eng:      'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=2105150919&single=true&output=csv',
-  elecDaily:'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=1049854383&single=true&output=csv',
-  elecBill: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=726252262&single=true&output=csv',
-  capex:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=734700933&single=true&output=csv',
+  labour:    'https://script.google.com/macros/s/AKfycbzZ0MCT_yPBDbPq-1cx9_wXwVFA1IgI_r9VmeAW6ZCvv8SqoF9zk5JWi2inMiWvqMD1/exec',
+  eng:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=2105150919&single=true&output=csv',
+  elecDaily: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=1049854383&single=true&output=csv',
+  elecBill:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=726252262&single=true&output=csv',
+  capex:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=734700933&single=true&output=csv',
+  prodDB:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=592000704&single=true&output=csv',
+  prodSrc:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=636362217&single=true&output=csv',
 };
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[];
+// ── EMPLOYMENT COST RATES (confirmed from Production DB sources sheet) ────────
+const EMPLOYMENT_RATES = {
+  helper:   { fixedDaily:2520.00, fixedHr:315.00, otHr:225.00, dotHr:300.00, blended:239.375 },
+  operator: { fixedDaily:2850.00, fixedHr:356.25, otHr:262.50, dotHr:350.00, blended:273.021 },
+  blendedHr:  256.20,
+  blendedDay: 3074.375,
+};
+
+// ── HELPER: Calculate employee daily cost based on actual hours ───────────────
+function calcDailyCost(role, hours, isSundayOrPoya) {
+  const r = EMPLOYMENT_RATES[role] || EMPLOYMENT_RATES.helper;
+  if(isSundayOrPoya) return r.fixedDaily + hours * r.dotHr;
+  if(hours <= 8)     return r.fixedDaily;
+  if(hours <= 11)    return r.fixedDaily + (hours - 8) * r.otHr;
+  return r.fixedDaily + 3 * r.otHr + (hours - 11) * r.otHr;
+}
+
+let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodSources={};
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const lname=c=>LM[c]||c;
@@ -541,12 +560,14 @@ async function connectAll(){
   if(bt)bt.textContent='⏳ Connecting to all data sources…';
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
 
-  const [waData,engRows,elecDRows,elecBRows,capRows]=await Promise.all([
+  const [waData,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows]=await Promise.all([
     fetchWebApp(URLS.labour,from,to),
     fetchCSV(URLS.eng),
     fetchCSV(URLS.elecDaily),
     fetchCSV(URLS.elecBill),
     fetchCSV(URLS.capex),
+    fetchCSV(URLS.prodDB),
+    fetchCSV(URLS.prodSrc),
   ]);
 
   // Store data
@@ -555,6 +576,8 @@ async function connectAll(){
   elecDaily = filterByDate(elecDRows,'date',from,to);
   elecBill  = elecBRows; // all months
   capexData = capRows;
+  prodData  = filterByDate(prodRows,'date',from,to);
+  if(srcRows.length>0) parseProdSources(srcRows);
 
   // Build status
   const parts=[];
@@ -563,6 +586,7 @@ async function connectAll(){
   if(elecDRows.length>0)parts.push(`✅ Electricity: ${elecDaily.length} daily records`);
   if(elecBRows.length>0)parts.push(`✅ Bills: ${elecBRows.length} months`);
   if(capRows.length>0)parts.push(`✅ Capex: ${capRows.length} assets`);
+  if(prodRows.length>0)parts.push(`✅ Production DB: ${prodData.length} records (${from} to ${to})`);
 
   if(parts.length>0){
     if(bar)bar.className='live-bar connected';
@@ -584,11 +608,108 @@ async function connectAll(){
   renderAll();
 }
 
+// ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
+function parseProdSources(rows) {
+  // Extract employment rates and standard outputs from sources sheet
+  prodSources = { rates: {}, standards: {} };
+  rows.forEach(r => {
+    const label = String(r[''] || r[Object.keys(r)[0]] || '').trim().toLowerCase();
+    const val1  = Object.values(r)[1];
+    const val2  = Object.values(r)[3];
+    if(label.includes('hr cost') || label.includes('hr_cost')) {
+      prodSources.rates.helperHr   = parseFloat(val1) || 239.375;
+      prodSources.rates.operatorHr = parseFloat(val2) || 273.021;
+    }
+    if(label.includes('avg labor cost hr') || label.includes('avg_labor_cost_hr')) {
+      prodSources.rates.blendedHr = parseFloat(val1) || 256.20;
+    }
+  });
+  // Use confirmed rates if not found
+  if(!prodSources.rates.blendedHr) prodSources.rates.blendedHr = EMPLOYMENT_RATES.blendedHr;
+  if(!prodSources.rates.helperHr)  prodSources.rates.helperHr  = EMPLOYMENT_RATES.helper.blended;
+  if(!prodSources.rates.operatorHr)prodSources.rates.operatorHr= EMPLOYMENT_RATES.operator.blended;
+}
+
+// ── GET ACTUAL PRODUCTION DATA FOR DATE RANGE ─────────────────────────────────
+function getProdActuals(from, to) {
+  if(!prodData || prodData.length === 0) return null;
+
+  const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
+
+  // Batch lines excluded from volume (but included in cost)
+  const BATCH_LINES = ['DPML','LBML','CRWL','PRL','FGL','PCL','AFPL','BPL','CPL'];
+
+  const lineAgg = {}, dailyAgg = {}, productAgg = {};
+  let totalKg = 0, totalCS = 0, totalRunHrs = 0, totalLabHrs = 0;
+
+  prodData.forEach(r => {
+    const date    = String(r['date']||'').trim();
+    const line    = String(r['line']||r['production_line']||'').trim();
+    const product = String(r['product']||r['product_description']||'').trim();
+    const runHrs  = sf(r['run_time_hr']||r['run_time']||r['runtime']||0);
+    const actCS   = sf(r['actual_cs']||r['actual_output_cs']||0);
+    const actKg   = sf(r['actual_kg']||r['actual_output_kg']||0);
+    const labHrs  = sf(r['actual_labour_hrs']||r['actual_hrs']||r['actual_labor_hrs']||0);
+    const planCS  = sf(r['planned_cs']||r['planned_output_cs']||0);
+    const planHrs = sf(r['planned_hrs']||r['planned_labour_hrs']||0);
+
+    if(!line) return;
+    const isBatch = BATCH_LINES.includes(line);
+
+    // Line aggregation
+    if(!lineAgg[line]) lineAgg[line] = {runHrs:0,labHrs:0,actCS:0,actKg:0,planCS:0,planHrs:0,isBatch};
+    lineAgg[line].runHrs  += runHrs;
+    lineAgg[line].labHrs  += labHrs;
+    lineAgg[line].actCS   += actCS;
+    lineAgg[line].actKg   += actKg;
+    lineAgg[line].planCS  += planCS;
+    lineAgg[line].planHrs += planHrs;
+
+    // Daily aggregation
+    if(!dailyAgg[date]) dailyAgg[date] = {actKg:0,actCS:0,runHrs:0,labHrs:0};
+    if(!isBatch) {
+      dailyAgg[date].actKg += actKg;
+      dailyAgg[date].actCS += actCS;
+      totalKg += actKg;
+      totalCS += actCS;
+    }
+    dailyAgg[date].runHrs += runHrs;
+    dailyAgg[date].labHrs += labHrs;
+    totalRunHrs += runHrs;
+    totalLabHrs += labHrs;
+
+    // Product aggregation
+    if(product && !isBatch) {
+      if(!productAgg[product]) productAgg[product] = {line,runHrs:0,actCS:0,actKg:0,planCS:0};
+      productAgg[product].runHrs += runHrs;
+      productAgg[product].actCS  += actCS;
+      productAgg[product].actKg  += actKg;
+      productAgg[product].planCS += planCS;
+    }
+  });
+
+  const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
+
+  return {
+    lineAgg, dailyAgg, productAgg,
+    totalKg, totalCS, totalRunHrs, totalLabHrs,
+    blendedHr,
+    labourCostTotal: totalRunHrs * blendedHr,
+    labPerKg:  totalKg > 0 ? (totalRunHrs * blendedHr) / totalKg : 0,
+    labPerCS:  totalCS > 0 ? (totalRunHrs * blendedHr) / totalCS : 0,
+    effPct:    totalRunHrs > 0 ? (totalRunHrs / totalLabHrs * 100) : 0,
+  };
+}
+
 // ── COST CALCULATIONS ─────────────────────────────────────────────────────────
 function calcCosts(from,to){
-  // Labour
-  const labourCost = allocData&&allocData.filesFound>0 ? allocData.totalCost : 0;
-  const labourHrs  = allocData&&allocData.filesFound>0 ? allocData.totalHours : 0;
+  // Get live production actuals if available
+  const prod = getProdActuals(from, to);
+
+  // Labour — use run time from prod DB if available, else allocation hours
+  const labourHrs  = prod ? prod.totalRunHrs : (allocData&&allocData.filesFound>0 ? allocData.totalHours : 0);
+  const blendedHr  = (prodSources.rates&&prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
+  const labourCost = allocData&&allocData.filesFound>0 ? allocData.totalCost : (labourHrs * blendedHr);
 
   // Maintenance (sum Amount column for date range)
   let maintCost=0, maintFactory=0, maintMachinery=0, maintPreventive=0, maintBreakdown=0;
@@ -616,9 +737,10 @@ function calcCosts(from,to){
     if(rate>0)elecCost=elecKwh*rate;
   }
 
-  // Total kg from production DB for date range
-  const rows=SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
-  const totalKg=rows.reduce((s,d)=>s+(d.kg_a||0),0);
+  // Total kg — use live production DB if available, else embedded historical data
+  const rows = SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
+  const totalKg = prod && prod.totalKg > 0 ? prod.totalKg : rows.reduce((s,d)=>s+(d.kg_a||0),0);
+  const totalCS = prod && prod.totalCS > 0 ? prod.totalCS : rows.reduce((s,d)=>s+(d.pcs_a||0),0);
 
   return{labourCost,labourHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,
     totalCost:labourCost+maintCost+elecCost,
