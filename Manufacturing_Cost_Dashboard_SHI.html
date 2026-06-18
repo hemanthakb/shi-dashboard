@@ -840,10 +840,22 @@ function renderAlerts(rows,c){
 // ── RENDER TREND CHART ────────────────────────────────────────────────────────
 function renderTrend(rows,c){
   if(charts.trend)charts.trend.destroy();
-  const labels=rows.map(d=>d.date.slice(5));
-  const labData=rows.map(d=>(allocData&&allocData.dailyTotals&&allocData.dailyTotals[d.date])?allocData.dailyTotals[d.date].cost:d.ac);
-  // Spread maint & elec evenly across days if we have period totals
-  const n=Math.max(rows.length,1);
+
+  // Use live daily totals if available, otherwise fall back to embedded SD data
+  let labels, labData;
+  if(allocData && allocData.dailyTotals && Object.keys(allocData.dailyTotals).length > 0) {
+    const dailyDates = Object.keys(allocData.dailyTotals).sort();
+    labels  = dailyDates.map(d=>d.slice(5));
+    labData = dailyDates.map(d=>allocData.dailyTotals[d].cost||0);
+  } else if(rows.length > 0) {
+    labels  = rows.map(d=>d.date.slice(5));
+    labData = rows.map(d=>d.ac);
+  } else {
+    // No data for selected range
+    labels  = [];
+    labData = [];
+  }
+  const n=Math.max(labels.length,1);
   const maintPerDay=c.maintCost/n, elecPerDay=c.elecCost/n;
   charts.trend=new Chart($('trendChart').getContext('2d'),{
     type:'bar',
