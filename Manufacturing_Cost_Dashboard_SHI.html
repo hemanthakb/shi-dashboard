@@ -899,6 +899,14 @@ function renderLabour(c){
   const otHr  = EMPLOYMENT_RATES.helper.otHr;
   const dotHr = EMPLOYMENT_RATES.helper.dotHr;
 
+  // Debug
+  console.log('renderLabour called:', {
+    allocData: allocData ? 'exists' : 'null',
+    filesFound: allocData ? allocData.filesFound : 'N/A',
+    totalHours: allocData ? allocData.totalHours : 'N/A',
+    totalCost: allocData ? allocData.totalCost : 'N/A',
+  });
+
   if(allocData && allocData.filesFound > 0) {
     // Live data from ERP allocation
     const totalHrs = allocData.totalHours;
