@@ -449,6 +449,73 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
     <button onclick="toggleCapexTable()" id="capex-toggle-btn" style="margin-top:10px;padding:5px 14px;border-radius:6px;border:1px solid #e8d5a0;background:#fff;color:var(--gold-dk);font-size:11px;cursor:pointer;font-weight:600;">Show Asset Detail ▼</button>
   </div>
 
+  <!-- ── HOURLY RATES SECTION ────────────────────────────────────────────── -->
+  <div class="section-title">Hourly Labour Cost by Product <span class="section-tag tag-labour">Actual from ERP Allocation + Production DB</span></div>
+
+  <!-- Summary filter -->
+  <div class="cc" style="margin-bottom:14px;padding:12px 16px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);">Filter by Line:</div>
+      <select id="hr-line-filter" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;" onchange="renderHourlyRates()">
+        <option value="all">All Lines</option>
+      </select>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+        <select id="hr-view-mode" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;" onchange="renderHourlyRates()">
+          <option value="perCS">View: Cost per CS</option>
+          <option value="perHr">View: Cost per Hour</option>
+          <option value="perKg">View: Cost per kg</option>
+        </select>
+        <div style="font-size:10px;color:var(--text3);">Allocated Hours × LKR 256.20</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Line chart -->
+  <div class="cc" style="margin-bottom:18px;">
+    <div class="ch">
+      <div>
+        <div class="ct">Labour Cost per Case (CS) by Product</div>
+        <div class="cs" id="hr-chart-sub">Select date range and connect to see product costs</div>
+      </div>
+      <div class="leg">
+        <div class="li"><div class="ld" style="background:#1a5fa8"></div>Actual Cost/CS</div>
+        <div class="li"><div class="ld" style="background:#e8a000;border:2px dashed #e8a000;background:transparent"></div>Standard Cost/CS</div>
+      </div>
+    </div>
+    <canvas id="hrChart" style="max-height:280px;"></canvas>
+  </div>
+
+  <!-- Product detail table -->
+  <div class="tcard" id="hr-table-card" style="margin-bottom:18px;display:none;">
+    <div class="thead">
+      <div>
+        <div class="ct">Product Labour Cost Detail</div>
+        <div class="cs" id="hr-table-sub"></div>
+      </div>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr>
+          <th style="text-align:left">Product</th>
+          <th style="text-align:left">Line</th>
+          <th>Alloc Hrs</th>
+          <th>Run Time</th>
+          <th>Std HC</th>
+          <th>Labour Cost</th>
+          <th style="background:var(--teal-lt);color:var(--teal)">LKR/Hour</th>
+          <th>Actual CS</th>
+          <th>Actual kg</th>
+          <th style="background:var(--blue-lt);color:var(--blue)">LKR/CS Actual</th>
+          <th style="background:var(--amber-lt);color:var(--amber)">LKR/CS Standard</th>
+          <th>Variance/CS</th>
+          <th>LKR/kg</th>
+        </tr></thead>
+        <tbody id="hr-tbody"></tbody>
+        <tfoot id="hr-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
   <!-- ── PRODUCTION DB SECTION ────────────────────────────────────────────── -->
   <div class="section-title">Production Database <span class="section-tag tag-labour">Jan–Mar 2026 Historical</span></div>
   <div class="tcard" style="margin-bottom:18px;">
@@ -483,6 +550,32 @@ const URLS = {
 };
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
+// ── PRODUCTION SOURCES — Standard headcount and output per product ────────────
+// Loaded from sources sheet CSV via prodSrc URL — updated automatically
+// Format: { 'Product Name|Stage': { headcount, csPerHr, line, kgPerCS } }
+let PROD_STANDARDS = {};  // populated from sources sheet on connect
+
+function buildProdStandards(srcRows) {
+  PROD_STANDARDS = {};
+  srcRows.forEach(r => {
+    // Column mapping: B=product, C=stage, D=headcount, E=cs_per_hr, H=kg_per_cs, K=line
+    const product   = String(r['fg_sku'] || r[Object.keys(r)[1]] || '').trim();
+    const stage     = String(r[''] || r[Object.keys(r)[2]] || '').trim();
+    const headcount = parseFloat(Object.values(r)[3]) || 0;
+    const csPerHr   = parseFloat(Object.values(r)[4]) || 0;
+    const kgPerCS   = parseFloat(Object.values(r)[7]) || 0;
+    const line      = String(Object.values(r)[10] || '').trim();
+
+    if(product && headcount > 0) {
+      const key = product;
+      if(!PROD_STANDARDS[key] || csPerHr > 0) {
+        PROD_STANDARDS[key] = { headcount, csPerHr, kgPerCS, line, stage };
+      }
+    }
+  });
+  console.log('PROD_STANDARDS built:', Object.keys(PROD_STANDARDS).length, 'products');
+}
+
 // ── EMPLOYMENT COST RATES (confirmed from Production DB sources sheet) ────────
 const EMPLOYMENT_RATES = {
   helper:   { fixedDaily:2520.00, fixedHr:315.00, otHr:225.00, dotHr:300.00, blended:239.375 },
@@ -626,7 +719,7 @@ async function connectAll(){
 
 // ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
 function parseProdSources(rows) {
-  // Extract employment rates and standard outputs from sources sheet
+  // Extract employment rates
   prodSources = { rates: {}, standards: {} };
   rows.forEach(r => {
     const label = String(r[''] || r[Object.keys(r)[0]] || '').trim().toLowerCase();
@@ -640,10 +733,12 @@ function parseProdSources(rows) {
       prodSources.rates.blendedHr = parseFloat(val1) || 256.20;
     }
   });
-  // Use confirmed rates if not found
   if(!prodSources.rates.blendedHr) prodSources.rates.blendedHr = EMPLOYMENT_RATES.blendedHr;
   if(!prodSources.rates.helperHr)  prodSources.rates.helperHr  = EMPLOYMENT_RATES.helper.blended;
   if(!prodSources.rates.operatorHr)prodSources.rates.operatorHr= EMPLOYMENT_RATES.operator.blended;
+
+  // Also build product standards lookup
+  buildProdStandards(rows);
 }
 
 // ── GET ACTUAL PRODUCTION DATA FOR DATE RANGE ─────────────────────────────────
@@ -715,6 +810,188 @@ function getProdActuals(from, to) {
     labPerCS:  totalCS > 0 ? (totalRunHrs * blendedHr) / totalCS : 0,
     effPct:    totalRunHrs > 0 ? (totalRunHrs / totalLabHrs * 100) : 0,
   };
+}
+
+// ── RENDER HOURLY RATES SECTION ──────────────────────────────────────────────
+function renderHourlyRates() {
+  if(!allocData || allocData.filesFound === 0) return;
+
+  const pt        = allocData.productTotals || {};
+  const blendedHr = EMPLOYMENT_RATES.blendedHr;
+  const lineFilter = document.getElementById('hr-line-filter') ?
+                     document.getElementById('hr-line-filter').value : 'all';
+  const viewMode   = document.getElementById('hr-view-mode') ?
+                     document.getElementById('hr-view-mode').value : 'perCS';
+
+  // Build product actuals from Production DB
+  const prodActuals = {};
+  prodData.forEach(r => {
+    const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
+    const product = String(r['product_sku']||r['product']||r[Object.keys(r)[4]]||'').trim();
+    const runHrs  = sf(r['run_time_hr']||r['run_time']||Object.values(r)[11]||0);
+    const actCS   = sf(r['actual_out_put_cs']||r['actual_cs']||Object.values(r)[15]||0);
+    const actKg   = sf(r['actual_out_put_kg']||r['actual_kg']||Object.values(r)[16]||0);
+
+    if(product && (actCS > 0 || actKg > 0)) {
+      if(!prodActuals[product]) prodActuals[product] = { runHrs:0, actCS:0, actKg:0 };
+      prodActuals[product].runHrs += runHrs;
+      prodActuals[product].actCS  += actCS;
+      prodActuals[product].actKg  += actKg;
+    }
+  });
+
+  // Combine allocation hours with production actuals
+  const products = [];
+  Object.entries(pt).forEach(([key, alloc]) => {
+    const lineName = alloc.line || '';
+    const prodName = alloc.product || '';
+    if(lineFilter !== 'all' && !lineName.toLowerCase().includes(lineFilter.toLowerCase())) return;
+
+    const actuals  = prodActuals[prodName] || { runHrs:0, actCS:0, actKg:0 };
+    const labCost  = Math.round(alloc.hours * blendedHr);
+
+    // Standard from sources sheet
+    const std      = PROD_STANDARDS[prodName] || {};
+    const stdCShr  = std.csPerHr || 0;
+    const stdHC    = std.headcount || 0;
+    const stdCostPerCS = stdCShr > 0 ? Math.round((stdHC * blendedHr) / stdCShr * 100) / 100 : 0;
+
+    // Actual cost per CS using total allocated hours
+    const actCostPerCS = actuals.actCS > 0 ? Math.round(labCost / actuals.actCS * 100) / 100 : 0;
+    const actCostPerKg = actuals.actKg > 0 ? Math.round(labCost / actuals.actKg * 100) / 100 : 0;
+
+    // Cost per hour = total labour cost ÷ run time
+    const costPerHr = actuals.runHrs > 0 ?
+      Math.round(labCost / actuals.runHrs) : 0;
+
+    products.push({
+      key, lineName, prodName,
+      allocHrs:  alloc.hours,
+      employees: alloc.employees,
+      labCost,
+      costPerHr,
+      actCS:     actuals.actCS,
+      actKg:     actuals.actKg,
+      runHrs:    actuals.runHrs,
+      actCostPerCS,
+      actCostPerKg,
+      stdCostPerCS,
+      stdHC,
+      variance:  stdCostPerCS > 0 ? Math.round((actCostPerCS - stdCostPerCS) * 100) / 100 : 0,
+    });
+  });
+
+  // Sort by labour cost descending
+  products.sort((a,b) => b.labCost - a.labCost);
+
+  // Populate line filter dropdown
+  const lineSelect = document.getElementById('hr-line-filter');
+  if(lineSelect && lineSelect.options.length === 1) {
+    const lines = [...new Set(Object.values(pt).map(v=>v.line).filter(Boolean))].sort();
+    lines.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l; o.textContent = l;
+      lineSelect.appendChild(o);
+    });
+  }
+
+  // Update subtitle
+  const subEl = document.getElementById('hr-chart-sub');
+  if(subEl) subEl.textContent =
+    `${allocData.filesFound} day(s) · ${products.length} products · ` +
+    `${document.getElementById('f-from').value} to ${document.getElementById('f-to').value}`;
+
+  // Render line chart
+  if(charts.hr) charts.hr.destroy();
+  const showProducts = products.filter(p => p.actCostPerCS > 0).slice(0, 20);
+  if(showProducts.length > 0) {
+    charts.hr = new Chart(document.getElementById('hrChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: showProducts.map(p => p.prodName.length > 30 ? p.prodName.slice(0,28)+'…' : p.prodName),
+        datasets: [
+          {
+            label: viewMode==='perCS'?'Actual LKR/CS':viewMode==='perHr'?'Actual LKR/Hr':'Actual LKR/kg',
+            data: showProducts.map(p => viewMode==='perCS'?p.actCostPerCS:viewMode==='perHr'?p.costPerHr:p.actCostPerKg),
+            backgroundColor: showProducts.map(p =>
+              p.variance > 0 ? 'rgba(192,57,43,0.7)' : 'rgba(26,95,168,0.7)'
+            ),
+            borderRadius: 4,
+            order: 1,
+          },
+          {
+            label: 'Standard LKR/CS',
+            data: showProducts.map(p => viewMode==='perCS'?p.stdCostPerCS:0),
+            type: 'line',
+            borderColor: '#e8a000',
+            borderDash: [6,4],
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: false,
+            order: 0,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { labels: { font: { size: 9 }, padding: 8, boxWidth: 10 } },
+          tooltip: {
+            callbacks: {
+              label: c => {
+                const p = showProducts[c.dataIndex];
+                if(c.datasetIndex === 0) return `Actual: LKR ${c.parsed.y}/CS · ${p.actCS} CS · ${p.allocHrs}h allocated`;
+                return `Standard: LKR ${c.parsed.y}/CS (${p.stdHC} people × ${EMPLOYMENT_RATES.blendedHr}/hr)`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 8 }, color: '#4a5068', maxRotation: 45 } },
+          y: { grid: { color: '#eef0f4' }, ticks: { font: { size: 9 }, color: '#8b92a5', callback: v => 'LKR '+v } }
+        }
+      }
+    });
+  }
+
+  // Render table
+  const tableCard = document.getElementById('hr-table-card');
+  if(tableCard) tableCard.style.display = products.length > 0 ? '' : 'none';
+
+  const subEl2 = document.getElementById('hr-table-sub');
+  if(subEl2) subEl2.textContent = `${products.length} products · Total labour cost: LKR ${Math.round(products.reduce((s,p)=>s+p.labCost,0)).toLocaleString()}`;
+
+  document.getElementById('hr-tbody').innerHTML = products.map(p => {
+    const varClass = p.variance > 0 ? 'color:var(--red)' : p.variance < 0 ? 'color:var(--green)' : '';
+    return `<tr>
+      <td style="text-align:left;font-size:11px">${p.prodName}</td>
+      <td style="text-align:left;font-size:11px;color:var(--text2)">${p.lineName}</td>
+      <td style="text-align:right">${p.allocHrs.toFixed(2)}</td>
+      <td style="text-align:right">${p.runHrs > 0 ? p.runHrs.toFixed(2)+'h' : '–'}</td>
+      <td style="text-align:right">${p.stdHC||'–'}</td>
+      <td style="text-align:right;font-weight:600">LKR ${p.labCost.toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700;background:var(--teal-lt);color:var(--teal)">${p.costPerHr > 0 ? 'LKR '+p.costPerHr : '–'}</td>
+      <td style="text-align:right">${p.actCS > 0 ? p.actCS.toLocaleString() : '–'}</td>
+      <td style="text-align:right">${p.actKg > 0 ? p.actKg.toLocaleString() : '–'}</td>
+      <td style="text-align:right;font-weight:700;background:var(--blue-lt);color:var(--blue)">${p.actCostPerCS > 0 ? 'LKR '+p.actCostPerCS : '–'}</td>
+      <td style="text-align:right;background:var(--amber-lt);color:var(--amber)">${p.stdCostPerCS > 0 ? 'LKR '+p.stdCostPerCS : '–'}</td>
+      <td style="text-align:right;font-weight:600;${varClass}">${p.variance !== 0 ? (p.variance > 0 ? '+' : '')+p.variance : '–'}</td>
+      <td style="text-align:right">${p.actCostPerKg > 0 ? 'LKR '+p.actCostPerKg : '–'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('hr-tfoot').innerHTML = products.length > 0 ? `
+    <tr>
+      <td style="text-align:left;font-weight:700">TOTAL</td>
+      <td></td>
+      <td style="text-align:right;font-weight:700">${products.reduce((s,p)=>s+p.allocHrs,0).toFixed(2)}</td>
+      <td></td>
+      <td style="text-align:right;font-weight:700">LKR ${Math.round(products.reduce((s,p)=>s+p.labCost,0)).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700">${products.reduce((s,p)=>s+p.actCS,0).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700">${products.reduce((s,p)=>s+p.actKg,0).toLocaleString()}</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>` : '';
 }
 
 // ── COST CALCULATIONS ─────────────────────────────────────────────────────────
@@ -1147,6 +1424,7 @@ function renderAll(){
   renderTrend(rows,c);
   renderMix(c);
   renderLabour(c);
+  renderHourlyRates();
   renderMaintenance(c);
   renderElectricity(c);
   renderCapex();
