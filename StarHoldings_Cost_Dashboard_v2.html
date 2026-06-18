@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Holdings – Production Cost Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#f4f6f9; --surface:#ffffff; --surface2:#f0f2f6; --card:#f8f9fb;
+  --border:#dde1e9; --border2:#c8cdd8;
+  --gold:#b8860b; --gold-light:#fdf6e3; --gold-mid:#e8a000;
+  --blue:#1a5fa8; --blue-light:#e8f0fb;
+  --green:#1a7a3c; --green-light:#e8f7ed;
+  --red:#c0392b; --red-light:#fdf0ee;
+  --amber:#a05e00; --amber-light:#fef7e0;
+  --teal:#0d7a6b; --teal-light:#e6f7f5;
+  --purple:#5b3fa0; --purple-light:#f0ecfb;
+  --text:#1a1d26; --text2:#4a5068; --text3:#8b92a5;
+  --shadow:0 1px 4px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --radius:10px; --radius-sm:6px;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(--text); font-size:13px; line-height:1.5; }
+
+/* ── HEADER ── */
+.header { background:#fff; border-bottom:2px solid var(--gold-mid); padding:0 24px; display:flex; align-items:center; justify-content:space-between; height:58px; position:sticky; top:0; z-index:100; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.brand { display:flex; align-items:center; gap:12px; }
+.brand-mark { width:36px; height:36px; background:linear-gradient(135deg,var(--gold-mid),#c0620a); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:13px; color:#fff; letter-spacing:.5px; }
+.brand-name { font-size:14px; font-weight:700; color:var(--text); }
+.brand-sub { font-size:11px; color:var(--text3); }
+.header-right { display:flex; align-items:center; gap:8px; }
+.btn { padding:6px 13px; border-radius:var(--radius-sm); border:1px solid var(--border2); background:#fff; color:var(--text); font-size:12px; cursor:pointer; font-weight:500; transition:all .15s; }
+.btn:hover { background:var(--surface2); border-color:var(--blue); color:var(--blue); }
+.btn-primary { background:var(--blue); color:#fff; border-color:var(--blue); font-weight:600; }
+.btn-primary:hover { background:#145090; color:#fff; }
+.btn-gold { background:var(--gold-mid); color:#fff; border-color:var(--gold-mid); font-weight:600; }
+.btn-gold:hover { background:#c87800; color:#fff; }
+.refresh-info { font-size:11px; color:var(--text3); display:flex; align-items:center; gap:5px; }
+.refresh-dot { width:7px; height:7px; border-radius:50%; background:var(--green); }
+.refresh-dot.ticking { animation:tick 1s infinite; }
+@keyframes tick { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+#countdown { font-weight:600; color:var(--blue); min-width:22px; display:inline-block; }
+
+/* ── FILTERS ── */
+.filters { background:#fff; border-bottom:1px solid var(--border); padding:10px 24px; display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+.fg { display:flex; flex-direction:column; gap:3px; }
+.flabel { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.7px; }
+select, input[type=date] { background:#fff; border:1px solid var(--border2); color:var(--text); border-radius:var(--radius-sm); padding:6px 10px; font-size:12px; outline:none; cursor:pointer; }
+select:focus, input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(26,95,168,.1); }
+.fsep { width:1px; height:30px; background:var(--border); align-self:center; }
+.data-tag { font-size:10px; color:var(--text3); align-self:center; margin-left:auto; background:var(--surface2); padding:4px 10px; border-radius:20px; border:1px solid var(--border); }
+
+/* ── SHEETS PANEL ── */
+.sheets-panel { background:var(--teal-light); border:1px solid #a0d8d2; border-radius:var(--radius); padding:14px 18px; margin-bottom:18px; }
+.sheets-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.sheets-icon { font-size:20px; }
+.sheets-title { font-size:12px; font-weight:700; color:var(--teal); }
+.sheets-sub { font-size:11px; color:var(--text2); }
+.sheets-input { flex:1; min-width:260px; background:#fff; border:1px solid #a0d8d2; color:var(--text); border-radius:var(--radius-sm); padding:7px 12px; font-size:12px; outline:none; }
+.sheets-input:focus { border-color:var(--teal); }
+.sheets-btn { padding:7px 14px; border-radius:var(--radius-sm); background:var(--teal); border:none; color:#fff; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
+.sheets-btn:hover { background:#0a6055; }
+.sheets-status { font-size:11px; margin-top:8px; color:var(--text2); }
+
+/* ── MAIN ── */
+.main { padding:18px 24px; max-width:1500px; margin:0 auto; }
+
+/* ── ALERTS ── */
+.alert-zone { margin-bottom:16px; }
+.alert-bar { border-radius:var(--radius-sm); padding:10px 14px; display:flex; align-items:flex-start; gap:9px; margin-bottom:7px; border-left:4px solid; background:#fff; box-shadow:var(--shadow); }
+.alert-bar.red { border-left-color:var(--red); background:var(--red-light); }
+.alert-bar.amber { border-left-color:var(--amber); background:var(--amber-light); }
+.alert-bar.green { border-left-color:var(--green); background:var(--green-light); }
+.alert-icon { font-size:15px; flex-shrink:0; margin-top:1px; }
+.alert-title { font-weight:700; font-size:12px; }
+.alert-body { font-size:11px; color:var(--text2); margin-top:2px; }
+.alert-bar.red .alert-title { color:var(--red); }
+.alert-bar.amber .alert-title { color:var(--amber); }
+.alert-bar.green .alert-title { color:var(--green); }
+
+/* ── KPI GRID ── */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:13px; margin-bottom:18px; }
+.kpi { background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:15px 17px; box-shadow:var(--shadow); border-top:3px solid; }
+.kpi.gold { border-top-color:var(--gold-mid); }
+.kpi.blue { border-top-color:var(--blue); }
+.kpi.green { border-top-color:var(--green); }
+.kpi.red { border-top-color:var(--red); }
+.kpi.teal { border-top-color:var(--teal); }
+.kpi.purple { border-top-color:var(--purple); }
+.kpi.amber { border-top-color:var(--amber); }
+.kpi-label { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase; letter-spacing:.7px; margin-bottom:7px; }
+.kpi-value { font-size:23px; font-weight:700; color:var(--text); letter-spacing:-.5px; line-height:1; }
+.kpi-sub { font-size:11px; color:var(--text3); margin-top:5px; display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; }
+.badge.up { background:#fde8e6; color:var(--red); }
+.badge.down { background:var(--green-light); color:var(--green); }
+.badge.neutral { background:var(--blue-light); color:var(--blue); }
+.badge.warn { background:var(--amber-light); color:var(--amber); }
+
+/* ── CHART GRID ── */
+.chart-grid { display:grid; grid-template-columns:2fr 1fr; gap:15px; margin-bottom:18px; }
+.chart-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); }
+.card-head { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:14px; }
+.card-title { font-size:12px; font-weight:700; color:var(--text); }
+.card-sub { font-size:10px; color:var(--text3); margin-top:2px; }
+.legend { display:flex; gap:12px; flex-wrap:wrap; margin-top:3px; }
+.leg { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--text2); }
+.leg-dot { width:8px; height:8px; border-radius:50%; }
+.leg-dash { width:18px; border-top:2px dashed; }
+canvas { max-height:230px; }
+
+/* ── OT CARDS ── */
+.ot-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:13px; margin-bottom:18px; }
+.ot-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); border-left:4px solid; }
+.ot-card.normal { border-left-color:var(--green); }
+.ot-card.ot { border-left-color:var(--amber); }
+.ot-card.dot { border-left-color:var(--red); }
+.ot-type { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.7px; margin-bottom:5px; }
+.ot-card.normal .ot-type { color:var(--green); }
+.ot-card.ot .ot-type { color:var(--amber); }
+.ot-card.dot .ot-type { color:var(--red); }
+.ot-cost { font-size:21px; font-weight:700; letter-spacing:-.5px; }
+.ot-card.normal .ot-cost { color:var(--green); }
+.ot-card.ot .ot-cost { color:var(--amber); }
+.ot-card.dot .ot-cost { color:var(--red); }
+.ot-meta { font-size:11px; color:var(--text3); margin-top:4px; }
+
+/* ── EFF GRID ── */
+.eff-grid { display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:18px; }
+
+/* ── TABLE ── */
+.table-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin-bottom:18px; box-shadow:var(--shadow); }
+.table-head { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:var(--surface2); }
+.table-scroll { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+th { background:var(--surface2); padding:9px 13px; font-size:10px; font-weight:700; color:var(--text2); text-transform:uppercase; letter-spacing:.6px; text-align:right; border-bottom:1px solid var(--border); white-space:nowrap; }
+th:first-child, th:nth-child(2) { text-align:left; }
+td { padding:9px 13px; font-size:12px; border-bottom:1px solid #f0f2f5; text-align:right; color:var(--text); }
+td:first-child { text-align:left; font-weight:700; font-size:11px; color:var(--blue); }
+td:nth-child(2) { text-align:left; color:var(--text2); font-size:11px; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:#f8faff; }
+.pbar { display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+.pb-track { width:65px; height:5px; background:var(--border); border-radius:3px; overflow:hidden; flex-shrink:0; }
+.pb-fill { height:100%; border-radius:3px; }
+.pct { font-size:10px; color:var(--text3); min-width:38px; text-align:right; }
+.alloc-card { background:#fff; border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); margin-bottom:18px; }
+
+/* ── PRINT ── */
+@media print {
+  .filters, .header-right, .sheets-panel, .no-print { display:none !important; }
+  .header { position:relative; border-bottom:2px solid #b8860b; }
+  body { background:#fff; font-size:11px; }
+  .kpi-grid { grid-template-columns:repeat(6,1fr); }
+  .chart-grid, .eff-grid { grid-template-columns:1fr 1fr; }
+  .ot-grid { grid-template-columns:repeat(3,1fr); }
+  canvas { max-height:160px !important; }
+  .kpi, .chart-card, .table-card, .ot-card, .alloc-card { box-shadow:none; border:1px solid #ccc; }
+  .alert-bar { box-shadow:none; }
+  @page { margin:15mm; size:A4 landscape; }
+}
+
+@media (max-width:768px) {
+  .chart-grid, .eff-grid, .ot-grid { grid-template-columns:1fr; }
+  .main { padding:10px 12px; }
+  .header { padding:0 14px; }
+  .filters { padding:8px 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="brand">
+    <div class="brand-mark">SH</div>
+    <div>
+      <div class="brand-name">Star Holdings International</div>
+      <div class="brand-sub">Production Cost Dashboard · Labour & Overhead Tracker</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="refresh-info no-print">
+      <div class="refresh-dot ticking" id="refresh-dot"></div>
+      Auto-refresh in <span id="countdown">60</span>s
+    </div>
+    <button class="btn btn-gold no-print" onclick="manualRefresh()">↻ Refresh Now</button>
+    <button class="btn btn-primary no-print" onclick="window.print()">🖨 Print Report</button>
+  </div>
+</div>
+
+<!-- FILTERS -->
+<div class="filters no-print">
+  <div class="fg"><span class="flabel">Date From</span><input type="date" id="f-from" value="2026-01-05"></div>
+  <div class="fg"><span class="flabel">Date To</span><input type="date" id="f-to" value="2026-03-28"></div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <span class="flabel">Production Line</span>
+    <select id="f-line"><option value="all">All Lines</option></select>
+  </div>
+  <div class="fg">
+    <span class="flabel">Shift Type</span>
+    <select id="f-shift">
+      <option value="all">All Shifts</option>
+      <option value="normal">Normal</option>
+      <option value="ot">OT (Weekday / Saturday · 1.5×)</option>
+      <option value="dot">Double OT (Sunday / Public Holiday · 2×)</option>
+    </select>
+  </div>
+  <button class="btn btn-primary" onclick="applyFilters()" style="align-self:flex-end">Apply</button>
+  <span class="data-tag" id="data-tag">Jan 5 – Mar 28 2026 · 596 records · 45 employees</span>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- GOOGLE SHEETS LIVE PANEL -->
+  <div class="sheets-panel no-print">
+    <div class="sheets-row">
+      <span class="sheets-icon">📊</span>
+      <div>
+        <div class="sheets-title">Connect Live Attendance — Google Sheets</div>
+        <div class="sheets-sub">Paste your shared attendance sheet URL to pull live daily data on every refresh</div>
+      </div>
+      <input class="sheets-input" id="sheets-url" placeholder="https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/...">
+      <button class="sheets-btn" onclick="loadGoogleSheet()">Connect</button>
+    </div>
+    <div class="sheets-status" id="sheets-status">⚠ Not connected — showing Production Database data. Connect your live attendance sheet to see today's real-time cost.</div>
+  </div>
+
+  <!-- ALERTS -->
+  <div class="alert-zone" id="alert-zone"></div>
+
+  <!-- LAST UPDATED -->
+  <div style="font-size:10px;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;gap:8px;" id="last-updated"></div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" id="kpi-grid"></div>
+
+  <!-- TREND + LINE PIE -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">Daily Labour Cost — Planned vs Actual</div>
+          <div class="card-sub">Actual hours × blended rate (LKR 150.56/hr) vs planned hours from Production DB</div>
+        </div>
+        <div class="legend">
+          <div class="leg"><div class="leg-dot" style="background:#1a5fa8"></div>Actual</div>
+          <div class="leg"><div class="leg-dash" style="border-color:#e8a000"></div>&nbsp;Planned</div>
+        </div>
+      </div>
+      <canvas id="trendChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="card-head">
+        <div><div class="card-title">Actual Cost by Line</div><div class="card-sub">Share of total labour cost</div></div>
+      </div>
+      <canvas id="lineChart"></canvas>
+    </div>
+  </div>
+
+  <!-- OT BREAKDOWN -->
+  <div class="ot-grid" id="ot-grid"></div>
+
+  <!-- EFFICIENCY + HOURS VARIANCE -->
+  <div class="eff-grid">
+    <div class="chart-card">
+      <div class="card-head">
+        <div><div class="card-title">Daily Output — Planned vs Actual Cases</div><div class="card-sub">CS gap drives labour cost variance per unit</div></div>
+        <div class="legend">
+          <div class="leg"><div class="leg-dot" style="background:#c8d8f0"></div>Planned CS</div>
+          <div class="leg"><div class="leg-dot" style="background:#1a5fa8"></div>Actual CS</div>
+        </div>
+      </div>
+      <canvas id="effChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="card-head">
+        <div><div class="card-title">Labour Hours Variance by Line</div><div class="card-sub">+% = over-hours (cost risk) · –% = under-hours</div></div>
+      </div>
+      <canvas id="hrsChart"></canvas>
+    </div>
+  </div>
+
+  <!-- LINE TABLE -->
+  <div class="table-card">
+    <div class="table-head">
+      <div>
+        <div class="card-title">Line-by-Line Cost Breakdown</div>
+        <div class="card-sub">Planned vs actual labour cost · hours variance · output efficiency</div>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th><th>Production Line</th>
+            <th>Days</th><th>Plan Hrs</th><th>Act Hrs</th>
+            <th>Plan CS</th><th>Act CS</th><th>Output Eff</th>
+            <th>Planned Cost</th><th>Actual Cost</th>
+            <th>Variance</th><th>Hrs Var%</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="line-tbody"></tbody>
+        <tfoot id="line-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ALLOCATION CHART -->
+  <div class="alloc-card">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Daily Labour Allocation by Line — 2 Jun 2026 (ERP Export)</div>
+        <div class="card-sub">Hours allocated per line from ERP · 53 workers · 475.6 total hrs · LKR cost at blended rate</div>
+      </div>
+    </div>
+    <canvas id="allocChart" style="max-height:170px;"></canvas>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+// ─── COMPLETE LINE MASTER ────────────────────────────────────────────────────
+const LINE_MASTER = {
+  'PRL':'Pan Room Line','BSL':'Budget Soap Line','DFL':'Dishwash Finishing Line',
+  'DPML':'Detergent Powder Mixing Line','DPPL':'Detergent Powder Packing Line',
+  'FSL':'Finishing Soap Line','ISL':'Incense Sticks Line',
+  'LBML':'Liquid Batch Mixing Line','LPSL':'Liquid Packing Sachet Line',
+  'TBCPL':'Toilet Bowl Cleaner Packing Line','AFPL':'Air Freshener Packing Line',
+  'GCPL':'Glass Cleaner Packing Line','BPL':'Bleaching Powder Line',
+  'CPL':'Cleaning Powder Line','BLPL':'Bleaching Liquid Packing Line',
+  'SBLPL':'Star Blue Liquid Packing Line','HWLPL':'Hand Wash Liquid Packing Line',
+  'DLPL':'Dishwash Liquid Packing Line','LLPL':'Laundry Liquid Packing Line',
+  'DPL':'Disinfectants Packing Line','FSBPL':'Fabric Softener Bottle Packing Line',
+  'PCL':'Price Coding Line','CRWL':'Chemical Room Weighing Line',
+  'FGL':'Factory General Line','PARL':'Promotion and Reworks Line',
+  'BPKL':'Blister Packing Line',
+};
+
+const LINE_COLORS = ['#1a5fa8','#0d7a6b','#b8860b','#c0392b','#5b3fa0','#1a7a3c',
+  '#e8a000','#a05e00','#2980b9','#16a085','#8e44ad','#27ae60',
+  '#d35400','#c0392b','#7f8c8d','#1abc9c','#e74c3c'];
+
+// ─── REAL STAR HOLDINGS DATA ─────────────────────────────────────────────────
+const STAR_DATA = {"avg_helper_hourly":148.77,"avg_operator_hourly":152.35,"avg_blended":150.56,"all_dates":["2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-10","2026-01-12","2026-01-13","2026-01-14","2026-01-16","2026-01-17","2026-01-19","2026-01-20","2026-01-21","2026-01-22","2026-01-23","2026-01-24","2026-01-26","2026-01-27","2026-01-28","2026-01-29","2026-01-30","2026-01-31","2026-02-03","2026-02-05","2026-02-06","2026-02-07","2026-02-09","2026-02-10","2026-02-11","2026-02-12","2026-02-13","2026-02-14","2026-02-16","2026-02-17","2026-02-18","2026-02-19","2026-02-20","2026-02-21","2026-02-23","2026-02-24","2026-02-25","2026-02-27","2026-02-28","2026-03-04","2026-03-05","2026-03-06","2026-03-07","2026-03-09","2026-03-10","2026-03-11","2026-03-12","2026-03-13","2026-03-14","2026-03-16","2026-03-17","2026-03-18","2026-03-19","2026-03-20","2026-03-21","2026-03-23","2026-03-24","2026-03-25","2026-03-26","2026-03-27","2026-03-28"],"all_lines":["BLPL","BPL","BSL","DFL","DLPL","DPL","DPPL","FSBPL","FSL","GCPL","HWLPL","ISL","LLPL","LPSL","PARL","SBLPL","TBCPL"],"daily_totals":[{"date":"2026-01-05","pc":10861,"ac":6775,"pcs_p":176.9,"pcs_a":34.0},{"date":"2026-01-06","pc":7198,"ac":8431,"pcs_p":230.8,"pcs_a":70.0},{"date":"2026-01-07","pc":24165,"ac":16411,"pcs_p":429.2,"pcs_a":108.2},{"date":"2026-01-08","pc":25704,"ac":21681,"pcs_p":374.5,"pcs_a":130.1},{"date":"2026-01-09","pc":14749,"ac":19874,"pcs_p":179.6,"pcs_a":138.7},{"date":"2026-01-10","pc":22939,"ac":16664,"pcs_p":322.2,"pcs_a":112.5},{"date":"2026-01-12","pc":43571,"ac":53060,"pcs_p":543.6,"pcs_a":230.8},{"date":"2026-01-13","pc":7829,"ac":13061,"pcs_p":116.0,"pcs_a":267.6},{"date":"2026-01-14","pc":27581,"ac":28886,"pcs_p":560.1,"pcs_a":252.2},{"date":"2026-01-16","pc":22679,"ac":27059,"pcs_p":362.8,"pcs_a":321.7},{"date":"2026-01-17","pc":15435,"ac":7102,"pcs_p":302.2,"pcs_a":54.0},{"date":"2026-01-19","pc":11187,"ac":4052,"pcs_p":272.5,"pcs_a":51.0},{"date":"2026-01-20","pc":10619,"ac":8659,"pcs_p":235.0,"pcs_a":88.3},{"date":"2026-01-21","pc":9190,"ac":7316,"pcs_p":248.4,"pcs_a":61.0},{"date":"2026-01-22","pc":15967,"ac":11745,"pcs_p":369.5,"pcs_a":100.8},{"date":"2026-01-23","pc":23079,"ac":16401,"pcs_p":486.2,"pcs_a":149.7},{"date":"2026-01-24","pc":33000,"ac":43349,"pcs_p":562.0,"pcs_a":289.6},{"date":"2026-01-26","pc":16169,"ac":25217,"pcs_p":312.8,"pcs_a":161.6},{"date":"2026-01-27","pc":23639,"ac":29701,"pcs_p":467.6,"pcs_a":204.6},{"date":"2026-01-28","pc":18584,"ac":21932,"pcs_p":331.7,"pcs_a":121.8},{"date":"2026-01-29","pc":565,"ac":188,"pcs_p":18.8,"pcs_a":5.0},{"date":"2026-01-30","pc":10655,"ac":6525,"pcs_p":247.5,"pcs_a":51.0},{"date":"2026-01-31","pc":24254,"ac":15121,"pcs_p":397.7,"pcs_a":338.8},{"date":"2026-02-03","pc":1710,"ac":1719,"pcs_p":31.9,"pcs_a":12.0},{"date":"2026-02-05","pc":12951,"ac":21324,"pcs_p":201.6,"pcs_a":128.1},{"date":"2026-02-06","pc":18764,"ac":24044,"pcs_p":355.4,"pcs_a":135.0},{"date":"2026-02-07","pc":34350,"ac":46237,"pcs_p":710.6,"pcs_a":632.8},{"date":"2026-02-09","pc":21366,"ac":40501,"pcs_p":411.7,"pcs_a":252.3},{"date":"2026-02-10","pc":31208,"ac":32123,"pcs_p":616.3,"pcs_a":279.8},{"date":"2026-02-11","pc":13419,"ac":14719,"pcs_p":286.0,"pcs_a":53.9},{"date":"2026-02-12","pc":9354,"ac":9908,"pcs_p":315.6,"pcs_a":66.8},{"date":"2026-02-13","pc":18669,"ac":21342,"pcs_p":500.8,"pcs_a":145.2},{"date":"2026-02-14","pc":4056,"ac":6096,"pcs_p":119.7,"pcs_a":30.0},{"date":"2026-02-16","pc":6179,"ac":7304,"pcs_p":114.4,"pcs_a":49.0},{"date":"2026-02-17","pc":20681,"ac":22033,"pcs_p":330.5,"pcs_a":231.8},{"date":"2026-02-18","pc":41229,"ac":28602,"pcs_p":686.1,"pcs_a":187.9},{"date":"2026-02-19","pc":24913,"ac":24213,"pcs_p":418.0,"pcs_a":310.4},{"date":"2026-02-20","pc":20975,"ac":14595,"pcs_p":384.9,"pcs_a":101.3},{"date":"2026-02-21","pc":24172,"ac":27077,"pcs_p":557.4,"pcs_a":278.6},{"date":"2026-02-23","pc":10934,"ac":8237,"pcs_p":215.7,"pcs_a":21.5},{"date":"2026-02-24","pc":13346,"ac":15235,"pcs_p":276.9,"pcs_a":112.0},{"date":"2026-02-25","pc":25110,"ac":21230,"pcs_p":420.5,"pcs_a":167.8},{"date":"2026-02-27","pc":16542,"ac":23948,"pcs_p":366.6,"pcs_a":249.1},{"date":"2026-02-28","pc":25278,"ac":34130,"pcs_p":534.1,"pcs_a":206.5},{"date":"2026-03-04","pc":17608,"ac":20279,"pcs_p":309.1,"pcs_a":244.8},{"date":"2026-03-05","pc":15189,"ac":15080,"pcs_p":351.0,"pcs_a":202.0},{"date":"2026-03-06","pc":5326,"ac":8573,"pcs_p":117.2,"pcs_a":75.0},{"date":"2026-03-07","pc":45093,"ac":37312,"pcs_p":859.1,"pcs_a":811.6},{"date":"2026-03-09","pc":27940,"ac":28682,"pcs_p":575.6,"pcs_a":344.0},{"date":"2026-03-10","pc":24530,"ac":22051,"pcs_p":559.0,"pcs_a":159.2},{"date":"2026-03-11","pc":51311,"ac":39484,"pcs_p":1276.1,"pcs_a":520.1},{"date":"2026-03-12","pc":49168,"ac":51115,"pcs_p":1036.1,"pcs_a":646.0},{"date":"2026-03-13","pc":50400,"ac":49977,"pcs_p":978.5,"pcs_a":603.7},{"date":"2026-03-14","pc":67507,"ac":61052,"pcs_p":1421.4,"pcs_a":810.0},{"date":"2026-03-16","pc":35493,"ac":42533,"pcs_p":623.6,"pcs_a":382.4},{"date":"2026-03-17","pc":52779,"ac":53524,"pcs_p":1009.6,"pcs_a":634.2},{"date":"2026-03-18","pc":64623,"ac":60962,"pcs_p":1436.9,"pcs_a":712.2},{"date":"2026-03-19","pc":54390,"ac":50513,"pcs_p":1157.5,"pcs_a":562.7},{"date":"2026-03-20","pc":39861,"ac":42119,"pcs_p":693.8,"pcs_a":366.0},{"date":"2026-03-21","pc":63988,"ac":62669,"pcs_p":1515.9,"pcs_a":914.4},{"date":"2026-03-23","pc":48312,"ac":49769,"pcs_p":946.2,"pcs_a":589.8},{"date":"2026-03-24","pc":24780,"ac":28382,"pcs_p":724.3,"pcs_a":432.0},{"date":"2026-03-25","pc":40062,"ac":47426,"pcs_p":964.3,"pcs_a":630.0},{"date":"2026-03-26","pc":40526,"ac":37565,"pcs_p":871.8,"pcs_a":581.1},{"date":"2026-03-27","pc":26248,"ac":20326,"pcs_p":453.6,"pcs_a":239.0},{"date":"2026-03-28","pc":49848,"ac":49712,"pcs_p":1369.2,"pcs_a":768.3}],"line_totals":{"BLPL":{"planned_cost":70367,"actual_cost":85420,"planned_cs":1828,"actual_cs":736,"planned_hrs":467,"actual_hrs":567,"active_days":22},"BPL":{"planned_cost":0,"actual_cost":3764,"planned_cs":0,"actual_cs":19,"planned_hrs":0,"actual_hrs":25,"active_days":1},"BSL":{"planned_cost":58738,"actual_cost":110990,"planned_cs":1815,"actual_cs":1135,"planned_hrs":390,"actual_hrs":737,"active_days":22},"DFL":{"planned_cost":118842,"actual_cost":122907,"planned_cs":2174,"actual_cs":1114,"planned_hrs":789,"actual_hrs":816,"active_days":12},"DLPL":{"planned_cost":12334,"actual_cost":11843,"planned_cs":308,"actual_cs":96,"planned_hrs":82,"actual_hrs":79,"active_days":5},"DPL":{"planned_cost":2764,"actual_cost":1807,"planned_cs":60,"actual_cs":8,"planned_hrs":18,"actual_hrs":12,"active_days":2},"DPPL":{"planned_cost":63967,"actual_cost":77054,"planned_cs":3070,"actual_cs":1747,"planned_hrs":425,"actual_hrs":512,"active_days":13},"FSBPL":{"planned_cost":88918,"actual_cost":89195,"planned_cs":2450,"actual_cs":1086,"planned_hrs":591,"actual_hrs":592,"active_days":21},"FSL":{"planned_cost":40115,"actual_cost":37839,"planned_cs":497,"actual_cs":246,"planned_hrs":266,"actual_hrs":251,"active_days":13},"GCPL":{"planned_cost":1019,"actual_cost":2484,"planned_cs":34,"actual_cs":20,"planned_hrs":7,"actual_hrs":16,"active_days":3},"HWLPL":{"planned_cost":4089,"actual_cost":5170,"planned_cs":129,"actual_cs":50,"planned_hrs":27,"actual_hrs":34,"active_days":2},"ISL":{"planned_cost":668512,"actual_cost":791078,"planned_cs":9911,"actual_cs":7616,"planned_hrs":4440,"actual_hrs":5254,"active_days":48},"LLPL":{"planned_cost":19653,"actual_cost":16084,"planned_cs":435,"actual_cs":765,"planned_hrs":131,"actual_hrs":107,"active_days":11},"LPSL":{"planned_cost":80060,"actual_cost":87950,"planned_cs":1914,"actual_cs":1495,"planned_hrs":532,"actual_hrs":584,"active_days":11},"PARL":{"planned_cost":457805,"actual_cost":265812,"planned_cs":9527,"actual_cs":1804,"planned_hrs":3041,"actual_hrs":1765,"active_days":57},"SBLPL":{"planned_cost":14201,"actual_cost":14966,"planned_cs":280,"actual_cs":78,"planned_hrs":94,"actual_hrs":99,"active_days":5},"TBCPL":{"planned_cost":8422,"actual_cost":8571,"planned_cs":220,"actual_cs":207,"planned_hrs":56,"actual_hrs":57,"active_days":5}},"alloc_by_line":{"Detergent Powder Mixing Line":65.0,"Finishing Soap Line":35.83,"Liquid Batch":71.93,"Promotions and Reworks Line":56.64,"Incense Sticks Line":61.0,"Liquid Packaging":35.83,"Dishwash Finishing Line":87.0,"Detergent Powder Packing Line":18.91,"Budget Soap Line":25.5,"Laundry Liquid Packing Line":18.0},"ot_summary":{"weekday":1926,"saturday":820,"sunday_dot":190,"cost_est":669205},"employee_count":45,"prod_record_count":596,"date_range":["2026-01-05","2026-03-28"]};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function lname(code) { return LINE_MASTER[code] || code; }
+function fmt(n) { if(isNaN(n)||!isFinite(n)) return '–'; if(n>=1000000) return 'LKR '+(n/1e6).toFixed(2)+'M'; if(n>=1000) return 'LKR '+(n/1000).toFixed(1)+'K'; return 'LKR '+Math.round(n).toLocaleString(); }
+function fmtN(n) { return 'LKR '+Math.round(n).toLocaleString('en-US'); }
+function pct(a,b) { return b>0?(a/b*100).toFixed(1):'0.0'; }
+function now() { return new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+
+let charts = {};
+
+// ─── FILTER ──────────────────────────────────────────────────────────────────
+function getFiltered() {
+  const from = document.getElementById('f-from').value;
+  const to   = document.getElementById('f-to').value;
+  return STAR_DATA.daily_totals.filter(d => d.date >= from && d.date <= to);
+}
+
+// ─── KPIs ─────────────────────────────────────────────────────────────────────
+function renderKPIs(rows) {
+  const tp = rows.reduce((s,d)=>s+d.pc,0), ta = rows.reduce((s,d)=>s+d.ac,0);
+  const pp = rows.reduce((s,d)=>s+d.pcs_p,0), pa = rows.reduce((s,d)=>s+d.pcs_a,0);
+  const v = ta-tp, vp = tp>0?(v/tp*100).toFixed(1):0;
+  const eff = pp>0?(pa/pp*100).toFixed(1):0;
+  const cpcs = pa>0?(ta/pa).toFixed(2):0;
+  const avg = rows.length>0?(ta/rows.length):0;
+
+  document.getElementById('kpi-grid').innerHTML = [
+    {c:'gold', l:'Total Actual Labour Cost', v:fmt(ta), s:`Planned: ${fmt(tp)}`, b:v>0?`▲ ${fmt(Math.abs(v))} over plan`:`▼ ${fmt(Math.abs(v))} under plan`, bt:v>0?'up':'down'},
+    {c:'red',  l:'Period Cost Variance', v:(v>=0?'+':'')+fmt(Math.abs(v)), s:`${Math.abs(vp)}% ${v>0?'over':'under'} plan · ${rows.length} days`, b:Math.abs(vp)>10?'Action required':Math.abs(vp)>5?'Monitor closely':'Within range', bt:Math.abs(vp)>10?'up':Math.abs(vp)>5?'warn':'down'},
+    {c:'blue',  l:'Avg Daily Labour Cost', v:fmt(avg), s:`Per active production day`, b:'LKR/day blended rate', bt:'neutral'},
+    {c:'teal',  l:'Output Efficiency', v:eff+'%', s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`, b:parseFloat(eff)<50?'Below target':parseFloat(eff)<75?'Mid range':'Good', bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'down'},
+    {c:'amber', l:'Labour Cost per CS', v:'LKR '+cpcs, s:'Actual cost ÷ cases produced', b:'Blended LKR '+STAR_DATA.avg_blended+'/hr', bt:'neutral'},
+    {c:'purple',l:'Employees Tracked', v:STAR_DATA.employee_count+'', s:`${STAR_DATA.prod_record_count} prod. records loaded`, b:'From payroll file', bt:'neutral'},
+  ].map(k=>`<div class="kpi ${k.c}"><div class="kpi-label">${k.l}</div><div class="kpi-value">${k.v}</div><div class="kpi-sub">${k.s} &nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
+}
+
+// ─── ALERTS ───────────────────────────────────────────────────────────────────
+function renderAlerts(rows) {
+  const tp = rows.reduce((s,d)=>s+d.pc,0), ta = rows.reduce((s,d)=>s+d.ac,0);
+  const vp = tp>0?((ta-tp)/tp*100):0;
+  const eff = rows.reduce((s,d)=>s+d.pcs_p,0)>0?(rows.reduce((s,d)=>s+d.pcs_a,0)/rows.reduce((s,d)=>s+d.pcs_p,0)*100):0;
+  const alerts = [];
+  const lt = STAR_DATA.line_totals;
+
+  const isl = lt['ISL'];
+  if(isl&&isl.actual_cost>isl.planned_cost)
+    alerts.push({t:'red',i:'🔴',title:`Incense Sticks Line (ISL) — LKR ${Math.round(isl.actual_cost-isl.planned_cost).toLocaleString()} cost overrun`,body:`Actual 5,254 hrs vs planned 4,440 hrs (+18.3%). Largest single overrun. Review worker allocation and shift planning.`});
+
+  const bsl = lt['BSL'];
+  if(bsl&&bsl.actual_cost>bsl.planned_cost*1.5)
+    alerts.push({t:'red',i:'🔴',title:`Budget Soap Line (BSL) — ${pct(bsl.actual_cost,bsl.planned_cost)}% of planned cost`,body:`Actual LKR ${Math.round(bsl.actual_cost).toLocaleString()} vs planned LKR ${Math.round(bsl.planned_cost).toLocaleString()}. Labour hours nearly doubled plan. Investigate scheduling.`});
+
+  const parl = lt['PARL'];
+  if(parl&&parl.actual_cost<parl.planned_cost*0.65)
+    alerts.push({t:'amber',i:'⚠️',title:`Promotions & Reworks (PARL) — Only ${pct(parl.actual_cost,parl.planned_cost)}% of planned cost used`,body:`Output only 1,804 of 9,527 planned CS (19% efficiency). Either plan is overstated or significant downtime. Review plan accuracy.`});
+
+  if(eff<60)
+    alerts.push({t:'amber',i:'⚠️',title:`Overall output efficiency ${eff.toFixed(1)}% — below 60% threshold`,body:`Labour cost per CS is elevated. High planned-vs-actual CS gap indicates unplanned downtime or breakdown. Review Production DB breakdown types.`});
+
+  if(alerts.length===0)
+    alerts.push({t:'green',i:'✅',title:'No critical cost overruns for selected period',body:'All lines within acceptable variance range. Continue monitoring daily.'});
+
+  document.getElementById('alert-zone').innerHTML = alerts.map(a=>`
+    <div class="alert-bar ${a.t}"><span class="alert-icon">${a.i}</span>
+    <div><div class="alert-title">${a.title}</div><div class="alert-body">${a.body}</div></div></div>`).join('');
+}
+
+// ─── OT ───────────────────────────────────────────────────────────────────────
+function renderOT() {
+  const ot = STAR_DATA.ot_summary, hr = STAR_DATA.avg_blended;
+  const base = STAR_DATA.employee_count*25*8*hr;
+  const wdC  = ot.weekday*hr*1.5, satC = ot.saturday*hr*1.5, sunC = ot.sunday_dot*hr*2;
+  document.getElementById('ot-grid').innerHTML = `
+    <div class="ot-card normal">
+      <div class="ot-type">🟢 Normal Shift Labour</div>
+      <div class="ot-cost">${fmt(base)}</div>
+      <div class="ot-meta">${STAR_DATA.employee_count} employees · est. 25 days · base rate 1.0×</div>
+    </div>
+    <div class="ot-card ot">
+      <div class="ot-type">🟡 Overtime — Weekday + Saturday (1.5×)</div>
+      <div class="ot-cost">${fmt(wdC+satC)}</div>
+      <div class="ot-meta">Weekday ${ot.weekday}h + Saturday ${ot.saturday}h · Rate 1.5×</div>
+    </div>
+    <div class="ot-card dot">
+      <div class="ot-type">🔴 Double OT — Sunday / Public Holiday (2×)</div>
+      <div class="ot-cost">${fmt(sunC)}</div>
+      <div class="ot-meta">${ot.sunday_dot} hours · Auto-flagged from attendance · Rate 2.0×</div>
+    </div>`;
+}
+
+// ─── TREND CHART ──────────────────────────────────────────────────────────────
+function renderTrend(rows) {
+  if(charts.trend) charts.trend.destroy();
+  charts.trend = new Chart(document.getElementById('trendChart').getContext('2d'),{
+    type:'line',
+    data:{labels:rows.map(d=>d.date.slice(5)),datasets:[
+      {label:'Actual',data:rows.map(d=>d.ac),borderColor:'#1a5fa8',backgroundColor:'rgba(26,95,168,.08)',fill:true,tension:.35,pointRadius:2,borderWidth:2},
+      {label:'Planned',data:rows.map(d=>d.pc),borderColor:'#e8a000',borderDash:[6,4],fill:false,tension:0,pointRadius:0,borderWidth:1.5},
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.label+': LKR '+c.parsed.y.toLocaleString()}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxTicksLimit:14,color:'#8b92a5'}},
+              y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>'LKR '+(v/1000).toFixed(0)+'K'}}}}
+  });
+}
+
+// ─── LINE PIE ─────────────────────────────────────────────────────────────────
+function renderLinePie() {
+  if(charts.pie) charts.pie.destroy();
+  const lt = STAR_DATA.line_totals;
+  const lines = Object.keys(lt).filter(k=>lt[k].actual_cost>0).sort((a,b)=>lt[b].actual_cost-lt[a].actual_cost).slice(0,9);
+  charts.pie = new Chart(document.getElementById('lineChart').getContext('2d'),{
+    type:'doughnut',
+    data:{labels:lines.map(l=>l+' – '+lname(l).split(' ').slice(0,2).join(' ')),
+          datasets:[{data:lines.map(l=>lt[l].actual_cost),backgroundColor:LINE_COLORS.slice(0,lines.length),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'58%',
+      plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:6,boxWidth:10}},
+               tooltip:{callbacks:{label:c=>`${c.label.split('–')[0].trim()}: ${fmt(c.parsed)}`}}}}
+  });
+}
+
+// ─── EFF CHART ────────────────────────────────────────────────────────────────
+function renderEff(rows) {
+  if(charts.eff) charts.eff.destroy();
+  charts.eff = new Chart(document.getElementById('effChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:rows.map(d=>d.date.slice(5)),datasets:[
+      {label:'Planned CS',data:rows.map(d=>d.pcs_p),backgroundColor:'rgba(200,216,240,.6)',borderColor:'#9ab4d8',borderWidth:1,borderRadius:2},
+      {label:'Actual CS', data:rows.map(d=>d.pcs_a),backgroundColor:'rgba(26,95,168,.5)', borderColor:'#1a5fa8',borderWidth:1,borderRadius:2},
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{labels:{font:{size:9},padding:8,boxWidth:10}},tooltip:{mode:'index',intersect:false}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxTicksLimit:12,color:'#8b92a5'}},
+              y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5'}}}}
+  });
+}
+
+// ─── HRS VARIANCE ─────────────────────────────────────────────────────────────
+function renderHrs() {
+  if(charts.hrs) charts.hrs.destroy();
+  const lt = STAR_DATA.line_totals;
+  const lines = Object.keys(lt).filter(k=>lt[k].planned_hrs>0).sort((a,b)=>(lt[b].actual_hrs-lt[b].planned_hrs)-(lt[a].actual_hrs-lt[a].planned_hrs));
+  const vp = lines.map(l=>lt[l].planned_hrs>0?((lt[l].actual_hrs-lt[l].planned_hrs)/lt[l].planned_hrs*100):0);
+  charts.hrs = new Chart(document.getElementById('hrsChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:lines.map(l=>l),datasets:[{label:'Hrs Var %',data:vp,
+      backgroundColor:vp.map(v=>v>15?'rgba(192,57,43,.55)':v>5?'rgba(160,94,0,.55)':v<-5?'rgba(26,122,60,.55)':'rgba(26,95,168,.35)'),
+      borderWidth:0,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:true,indexAxis:'y',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x>=0?'+':''}${c.parsed.x.toFixed(1)}% vs plan`}}},
+      scales:{x:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'%'},min:-50,max:100},
+              y:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068'}}}}
+  });
+}
+
+// ─── TABLE ────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const lt = STAR_DATA.line_totals;
+  const lines = Object.keys(lt).sort((a,b)=>lt[b].actual_cost-lt[a].actual_cost);
+  let totPlan=0,totAct=0,totPH=0,totAH=0,totPC=0,totAC=0;
+  const rows = lines.map(code=>{
+    const l=lt[code];
+    totPlan+=l.planned_cost; totAct+=l.actual_cost;
+    totPH+=l.planned_hrs; totAH+=l.actual_hrs;
+    totPC+=l.planned_cs; totAC+=l.actual_cs;
+    const v=l.actual_cost-l.planned_cost;
+    const hv=l.planned_hrs>0?((l.actual_hrs-l.planned_hrs)/l.planned_hrs*100):0;
+    const eff=l.planned_cs>0?(l.actual_cs/l.planned_cs*100).toFixed(1):'–';
+    const util=l.planned_hrs>0?Math.min((l.actual_hrs/l.planned_hrs)*100,200):0;
+    const bc=util>115?'#c0392b':util>105?'#a05e00':'#1a7a3c';
+    const stat=hv>15?'⚠ Over hrs':hv>5?'↑ Slightly over':hv<-10?'↓ Under hrs':'✓ On plan';
+    const sc=hv>15?'var(--red)':hv>5?'var(--amber)':hv<-10?'var(--blue)':'var(--green)';
+    return `<tr>
+      <td>${code}</td>
+      <td>${lname(code)}</td>
+      <td>${l.active_days}</td>
+      <td>${l.planned_hrs.toLocaleString()}</td>
+      <td>${l.actual_hrs.toLocaleString()}</td>
+      <td>${l.planned_cs.toLocaleString()}</td>
+      <td>${l.actual_cs.toLocaleString()}</td>
+      <td>${eff}%</td>
+      <td>${fmtN(l.planned_cost)}</td>
+      <td style="font-weight:700">${fmtN(l.actual_cost)}</td>
+      <td><span class="badge ${v>0?'up':'down'}">${v>=0?'+':''}${fmt(v)}</span></td>
+      <td><div class="pbar"><div class="pb-track"><div class="pb-fill" style="width:${Math.min(util,100)}%;background:${bc}"></div></div><span class="pct">${hv>=0?'+':''}${hv.toFixed(1)}%</span></div></td>
+      <td style="color:${sc};font-size:11px;font-weight:600">${stat}</td>
+    </tr>`;
+  });
+  const totV=totAct-totPlan;
+  document.getElementById('line-tbody').innerHTML = rows.join('');
+  document.getElementById('line-tfoot').innerHTML = `<tr style="background:#f4f6f9;font-weight:700;border-top:2px solid var(--border2);">
+    <td style="color:var(--text)">TOTAL</td><td style="color:var(--text2)">All Lines</td>
+    <td>–</td><td>${totPH.toLocaleString()}</td><td>${totAH.toLocaleString()}</td>
+    <td>${Math.round(totPC).toLocaleString()}</td><td>${Math.round(totAC).toLocaleString()}</td>
+    <td>${(totPC>0?totAC/totPC*100:0).toFixed(1)}%</td>
+    <td>${fmtN(totPlan)}</td><td>${fmtN(totAct)}</td>
+    <td><span class="badge ${totV>0?'up':'down'}">${totV>=0?'+':''}${fmt(totV)}</span></td>
+    <td>–</td><td>–</td></tr>`;
+}
+
+// ─── ALLOC CHART ─────────────────────────────────────────────────────────────
+function renderAlloc() {
+  if(charts.alloc) charts.alloc.destroy();
+  const a = STAR_DATA.alloc_by_line;
+  const lines = Object.keys(a).sort((x,y)=>a[y]-a[x]);
+  const costs = lines.map(l=>Math.round(a[l]*STAR_DATA.avg_blended));
+  charts.alloc = new Chart(document.getElementById('allocChart').getContext('2d'),{
+    type:'bar',
+    data:{labels:lines,datasets:[{label:'Hours',data:lines.map(l=>a[l]),
+      backgroundColor:'rgba(13,122,107,.25)',borderColor:'#0d7a6b',borderWidth:1,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y}h · Est. LKR ${costs[c.dataIndex].toLocaleString()}`}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068',maxRotation:35}},
+              y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'h'}}}}
+  });
+}
+
+// ─── LINE FILTER POPULATE ─────────────────────────────────────────────────────
+function populateLineFilter() {
+  const sel = document.getElementById('f-line');
+  STAR_DATA.all_lines.forEach(code=>{
+    const o = document.createElement('option');
+    o.value=code; o.textContent=`${code} — ${lname(code)}`;
+    sel.appendChild(o);
+  });
+}
+
+// ─── GOOGLE SHEETS ────────────────────────────────────────────────────────────
+async function loadGoogleSheet() {
+  const url = document.getElementById('sheets-url').value.trim();
+  const st  = document.getElementById('sheets-status');
+  if(!url){ st.textContent='⚠ Please paste a Google Sheets URL first.'; st.style.color='var(--amber)'; return; }
+  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if(!m){ st.textContent='❌ Cannot read Sheet ID. Copy the full Google Sheets URL.'; st.style.color='var(--red)'; return; }
+  const jsonUrl = `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:json`;
+  st.textContent='⏳ Connecting…'; st.style.color='var(--amber)';
+  try {
+    const r = await fetch(jsonUrl);
+    const txt = await r.text();
+    const json = JSON.parse(txt.match(/google\.visualization\.Query\.setResponse\((.*)\)/s)[1]);
+    const cols = json.table.cols.map(c=>c.label);
+    const rowCount = json.table.rows.length;
+    st.innerHTML = `✅ <strong>Connected!</strong> ${rowCount} rows loaded · Columns: ${cols.join(', ')} · Last pulled: ${now()}`;
+    st.style.color='var(--green)';
+  } catch(e) {
+    st.textContent=`❌ Error: ${e.message}. Check sheet is shared as "Anyone with link can view".`;
+    st.style.color='var(--red)';
+  }
+}
+
+// ─── REFRESH ──────────────────────────────────────────────────────────────────
+function updateTimestamp() {
+  document.getElementById('last-updated').innerHTML =
+    `<span style="color:var(--green);font-weight:600">●</span> Last updated: ${now()} &nbsp;·&nbsp; Auto-refresh every 60 seconds &nbsp;·&nbsp; <a href="#" onclick="manualRefresh();return false;" style="color:var(--blue)">Refresh now</a>`;
+}
+
+let countVal = 60;
+let countTimer;
+function startCountdown() {
+  clearInterval(countTimer);
+  countVal = 60;
+  document.getElementById('countdown').textContent = countVal;
+  countTimer = setInterval(()=>{
+    countVal--;
+    const el = document.getElementById('countdown');
+    if(el) el.textContent = countVal;
+    if(countVal <= 0) { autoRefresh(); }
+  }, 1000);
+}
+
+function autoRefresh() {
+  const sheetURL = document.getElementById('sheets-url').value.trim();
+  if(sheetURL) loadGoogleSheet();
+  renderDashboard();
+  startCountdown();
+}
+
+function manualRefresh() {
+  const sheetURL = document.getElementById('sheets-url').value.trim();
+  if(sheetURL) loadGoogleSheet();
+  renderDashboard();
+  startCountdown();
+}
+
+function applyFilters() { renderDashboard(); }
+
+// ─── MAIN RENDER ──────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const rows = getFiltered();
+  renderKPIs(rows);
+  renderAlerts(rows);
+  renderTrend(rows);
+  renderEff(rows);
+  updateTimestamp();
+}
+
+function renderAll() {
+  renderDashboard();
+  renderOT();
+  renderLinePie();
+  renderHrs();
+  renderTable();
+  renderAlloc();
+}
+
+populateLineFilter();
+renderAll();
+startCountdown();
+</script>
+</body>
+</html>
