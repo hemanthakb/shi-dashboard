@@ -617,6 +617,11 @@ async function connectAll(){
 
   // Always render - even if some sources have no data for selected range
   renderAll();
+  // Explicitly re-render labour section since allocData is now set
+  const c2 = calcCosts($('f-from').value, $('f-to').value);
+  renderLabour(c2);
+  renderLiveAlloc();
+  renderAlloc();
 }
 
 // ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
