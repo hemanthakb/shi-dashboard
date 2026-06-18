@@ -862,7 +862,8 @@ function renderTrend(rows,c){
   }
   const n=Math.max(labels.length,1);
   const maintPerDay=c.maintCost/n, elecPerDay=c.elecCost/n;
-  charts.trend=new Chart($('trendChart').getContext('2d'),{
+  const trendCanvas=$('trendChart');if(!trendCanvas)return;
+  charts.trend=new Chart(trendCanvas.getContext('2d'),{
     type:'bar',
     data:{labels,datasets:[
       {label:'Labour',data:labData,backgroundColor:'rgba(26,95,168,.7)',stack:'s'},
@@ -882,8 +883,12 @@ function renderMix(c){
   const data=[c.labourCost,c.maintCost,c.elecCost].filter(v=>v>0);
   const lbls=['Labour','Maintenance','Electricity'].filter((_,i)=>[c.labourCost,c.maintCost,c.elecCost][i]>0);
   const cols=['#1a5fa8','#c0392b','#e8a000'];
-  if(!data.length){if($('mixChart'))$('mixChart').closest('.cc').innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px;">Connect data sources to see cost mix</div>';return;}
-  charts.mix=new Chart($('mixChart').getContext('2d'),{
+  const mixCanvas = $('mixChart');
+  if(!data.length||!mixCanvas){
+    if(mixCanvas&&mixCanvas.closest('.cc'))mixCanvas.closest('.cc').innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px;">Connect data sources to see cost mix</div>';
+    return;
+  }
+  charts.mix=new Chart(mixCanvas.getContext('2d'),{
     type:'doughnut',
     data:{labels:lbls,datasets:[{data,backgroundColor:cols.slice(0,data.length),borderWidth:2,borderColor:'#fff'}]},
     options:{responsive:true,maintainAspectRatio:true,cutout:'58%',
@@ -898,14 +903,6 @@ function renderLabour(c){
   const hr = EMPLOYMENT_RATES.blendedHr;
   const otHr  = EMPLOYMENT_RATES.helper.otHr;
   const dotHr = EMPLOYMENT_RATES.helper.dotHr;
-
-  // Debug
-  console.log('renderLabour called:', {
-    allocData: allocData ? 'exists' : 'null',
-    filesFound: allocData ? allocData.filesFound : 'N/A',
-    totalHours: allocData ? allocData.totalHours : 'N/A',
-    totalCost: allocData ? allocData.totalCost : 'N/A',
-  });
 
   if(allocData && allocData.filesFound > 0) {
     // Live data from ERP allocation
