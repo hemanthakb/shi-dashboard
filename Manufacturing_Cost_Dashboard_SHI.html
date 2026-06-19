@@ -632,6 +632,7 @@ function parseLabourCSV(rows, from, to) {
     };
   });
 
+  console.log('parseLabourCSV: daysSet=', [...daysSet], 'totalHours=', totalHours, 'employees=', employeeSet.size, 'lines=', Object.keys(lineTotals).length);
   return {
     filesFound:    daysSet.size,
     daysFound:     daysSet.size,
