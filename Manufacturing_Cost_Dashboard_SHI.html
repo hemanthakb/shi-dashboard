@@ -869,6 +869,7 @@ async function connectAll(){
         const v = String(vals[i]||'').trim();
         if(!dateVal && (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v))) {
           dateVal=normaliseDate(v);
+        }
         if(!lineVal && /^[A-Z]{2,6}$/.test(v) && v!=='DAY'&&v!=='OEE') lineVal=v;
       }
       // Product and stage are typically after line code
