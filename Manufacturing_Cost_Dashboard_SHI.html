@@ -557,28 +557,38 @@ let PROD_STANDARDS = {};  // populated from sources sheet on connect
 
 function buildProdStandards(srcRows) {
   PROD_STANDARDS = {};
-  srcRows.forEach(r => {
-    // Sources sheet CSV columns (after parsing):
-    // col[0]=empty, col[1]=fg_sku, col[2]=stage, col[3]=headcount, 
-    // col[4]=hr_cs_batch, col[6]=shift_target, col[7]=per_cs_kg, col[10]=line
-    const vals    = Object.values(r);
-    const keys    = Object.keys(r);
-    // Try named keys first, fall back to positional
-    const product   = String(r['fg_sku'] || vals[1] || '').trim();
-    const stage     = String(r[''] || vals[2] || '').trim();
+  if(!srcRows || srcRows.length === 0) return;
+  
+  // Log first row to understand structure
+  if(srcRows.length > 0) {
+    console.log('srcRow[0] keys:', Object.keys(srcRows[0]).join(', '));
+    console.log('srcRow[0] vals:', Object.values(srcRows[0]).slice(0,12).join(' | '));
+  }
+
+  srcRows.forEach((r,idx) => {
+    const vals = Object.values(r);
+    // Sources sheet positional columns:
+    // [0]=row#, [1]=FG_SKU/product, [2]=stage, [3]=headcount, 
+    // [4]=CS/hr, [5]=batch_size, [6]=shift_target, [7]=kg_per_cs, [10]=line_code
+    const product   = String(vals[1] || '').trim();
+    const stage     = String(vals[2] || '').trim();
     const headcount = parseFloat(vals[3]) || 0;
     const csPerHr   = parseFloat(vals[4]) || 0;
     const kgPerCS   = parseFloat(vals[7]) || 0;
     const line      = String(vals[10] || '').trim();
 
-    if(product && product !== 'FG SKU' && headcount > 0) {
-      // Only store if this stage has output (csPerHr > 0) or no entry yet
-      if(!PROD_STANDARDS[product] || csPerHr > 0) {
-        PROD_STANDARDS[product] = { headcount, csPerHr, kgPerCS, line, stage };
-      }
+    // Skip header rows and empty rows
+    if(!product || product === 'FG SKU' || product === 'FG_SKU' || 
+       isNaN(headcount) || headcount === 0) return;
+
+    if(!PROD_STANDARDS[product] || csPerHr > 0) {
+      PROD_STANDARDS[product] = { headcount, csPerHr, kgPerCS, line, stage };
     }
   });
   console.log('PROD_STANDARDS built:', Object.keys(PROD_STANDARDS).length, 'products');
+  if(Object.keys(PROD_STANDARDS).length > 0) {
+    console.log('Sample standard:', Object.keys(PROD_STANDARDS)[0], '=', JSON.stringify(Object.values(PROD_STANDARDS)[0]));
+  }
 }
 
 // ── EMPLOYMENT COST RATES (confirmed from Production DB sources sheet) ────────
@@ -674,9 +684,69 @@ async function connectAll(){
   elecDaily = filterByDate(elecDRows,'date',from,to);
   elecBill  = elecBRows; // all months
   capexData = capRows;
-  prodData  = filterByDate(prodRows,'date',from,to);
-  console.log('prodData rows:', prodData.length, 'from', prodRows.length, 'total');
-  if(prodRows.length > 0) console.log('First prodRow keys:', Object.keys(prodRows[0]).join(', '));
+  // Production DB CSV has company name as first header - find actual date column
+  // by looking for rows where a column contains a valid date value
+  if(prodRows.length > 0) {
+    const firstRow = prodRows[0];
+    const allKeys = Object.keys(firstRow);
+    console.log('First prodRow keys:', allKeys.slice(0,5).join(', '));
+    
+    // Find which key contains date values (YYYY-MM-DD format)
+    let dateKey = 'date';
+    // Search multiple rows to find date column (first row may be header)
+    const searchRows = prodRows.slice(0, 5);
+    outer: for(const k of allKeys) {
+      for(const sr of searchRows) {
+        const v = String(sr[k]||'').trim();
+        if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(v)) {
+          dateKey = k;
+          console.log('Found date column:', dateKey, '= sample:', v);
+          break outer;
+        }
+      }
+    }
+    
+    // Find product column
+    let productKey = 'product_sku';
+    for(const k of allKeys) {
+      if(k.includes('sku') || k.includes('product')) { productKey = k; break; }
+    }
+    
+    // Find line column (short uppercase codes like DFL, ISL, DPPL)
+    let lineKey = 'line';
+    outer2: for(const k of allKeys) {
+      for(const sr of searchRows) {
+        const v = String(sr[k]||'').trim();
+        if(v.length >= 2 && v.length <= 6 && /^[A-Z]+$/.test(v)) { 
+          lineKey = k; 
+          console.log('Found line column:', lineKey, '= sample:', v);
+          break outer2; 
+        }
+      }
+    }
+
+    // Normalize prodRows to use standard keys
+    prodData = prodRows.map(r => {
+      const dateVal = String(r[dateKey]||'').trim().slice(0,10);
+      return {
+        date:             dateVal,
+        line:             String(r[lineKey]||r['line']||'').trim(),
+        product_sku:      String(r[productKey]||r['product_sku']||'').trim(),
+        stage:            String(r['stage']||Object.values(r)[5]||'').trim(),
+        run_time_hr:      Object.values(r)[11],
+        planned_out_put_cs: Object.values(r)[12],
+        actual_out_put_cs:  Object.values(r)[15],
+        actual_out_put_kg:  Object.values(r)[16],
+        actual_labour_hr:   Object.values(r)[29],
+        planned_labour_hr:  Object.values(r)[27],
+      };
+    }).filter(r => r.date >= from && r.date <= to);
+    
+    console.log('prodData rows after filter:', prodData.length, 'dateRange:', from, 'to', to);
+    if(prodData.length > 0) console.log('Sample prodRow:', JSON.stringify(prodData[0]));
+  } else {
+    prodData = [];
+  }
   if(srcRows.length>0) parseProdSources(srcRows);
 
   // Build status
@@ -720,8 +790,6 @@ async function connectAll(){
   // Explicitly re-render sections that depend on allocData
   const c2 = calcCosts($('f-from').value, $('f-to').value);
   renderLabour(c2);
-  renderLiveAlloc();
-  renderAlloc();
   renderHourlyRates();
 }
 
