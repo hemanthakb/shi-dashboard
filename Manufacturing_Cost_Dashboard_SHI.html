@@ -749,17 +749,26 @@ async function fetchCSV(url){
     const lines=txt.trim().split('\n');
     if(lines.length<2)return[];
     const parseRow=row=>{const res=[];let cur='',inQ=false;for(let i=0;i<row.length;i++){const ch=row[i];if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){res.push(cur.trim());cur='';}else cur+=ch;}res.push(cur.trim());return res;};
-    // Find real header row - look for row that has recognizable field names
-    // Production DB: title in col 4, headers in row 3 (idx 2)
-    // Engineering: title in col 1, headers in row 3 (idx 2)
+    // Find real header row — must have multiple short field-name cells
+    // A real header row has several non-empty cells that are SHORT field names
+    // Instruction rows have long sentences in first cell
     let headerIdx=0;
     for(let i=0;i<Math.min(6,lines.length);i++){
       const vals=parseRow(lines[i]).map(v=>v.replace(/"/g,'').trim());
+      const nonEmpty=vals.filter(v=>v!=='').length;
+      const firstVal=vals[0].toLowerCase();
+      const firstLen=firstVal.length;
+      // Skip rows where first cell is a long sentence (title/instruction rows)
+      if(firstLen > 30) continue;
+      // Real header: multiple non-empty cells, first cell is short field name
+      // Check if this looks like a header (contains recognizable SHORT field names)
       const joined=vals.join('|').toLowerCase();
-      // Real header rows contain field names like date, line, amount, kwh, product etc.
-      if(joined.includes('date') || joined.includes('product') || joined.includes('month') || joined.includes('asset')){
-        // Make sure it's not a data row (data rows have dates like 2026-)
-        const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v));
+      const hasFieldNames = (joined.includes('date') || joined.includes('month') || joined.includes('asset')) 
+                         && nonEmpty >= 3
+                         && firstLen <= 30;
+      if(hasFieldNames){
+        // Make sure it's not a data row
+        const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v));
         if(!hasDataDate){ headerIdx=i; break; }
       }
     }
@@ -885,12 +894,12 @@ async function connectAll(){
         line:              lineVal,
         product_sku:       prodVal,
         stage:             stageVal,
-        run_time_hr:       vals[12],
-        planned_out_put_cs:vals[13],
-        actual_out_put_cs: vals[16],
-        actual_out_put_kg: vals[17],
-        actual_labour_hr:  vals[29],
-        planned_labour_hr: vals[27],
+        run_time_hr:       r['run_time_hr']||vals[12],
+        planned_out_put_cs:r['planned_out_put_cs']||vals[13],
+        actual_out_put_cs: r['actual_out_put_cs']||vals[15],
+        actual_out_put_kg: r['actual_out_put_kg']||vals[16],
+        actual_labour_hr:  r['actual_labour_hr']||r['total_labor_hr']||vals[10],
+        planned_labour_hr: r['planned_labour_hr']||vals[13],
       };
     }).filter(r => r.date && r.date >= from && r.date <= to);
     
