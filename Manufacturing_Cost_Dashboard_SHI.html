@@ -541,6 +541,7 @@ const SD={"avg_blended":256.20,"employee_count":45,"prod_record_count":596,"ot_s
 // ── DATA SOURCE URLs (hardcoded — update here if URLs change) ────────────────
 const URLS = {
   labour:    'https://script.google.com/macros/s/AKfycbzZ0MCT_yPBDbPq-1cx9_wXwVFA1IgI_r9VmeAW6ZCvv8SqoF9zk5JWi2inMiWvqMD1/exec',
+  labourCSV: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQGh56VfbKedkJ9-NdIXrtcUNmEFNf9WIzfSzZdo5PlkANovwvsXSQyqwn5q_8KHQ/pub?gid=1577816686&single=true&output=csv',
   eng:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=2105150919&single=true&output=csv',
   elecDaily: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=1049854383&single=true&output=csv',
   elecBill:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=726252262&single=true&output=csv',
@@ -550,6 +551,104 @@ const URLS = {
 };
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
+// ── PARSE LABOUR ALLOCATION CSV ───────────────────────────────────────────────
+function parseLabourCSV(rows, from, to) {
+  // CSV structure: Date | Employee | Line | Product | Hours
+  // Same as ERP format + Date column A
+  const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
+
+  const lineTotals    = {};
+  const productTotals = {};
+  const dailyTotals   = {};
+  const employeeSet   = new Set();
+  const daysSet       = new Set();
+  let   totalHours    = 0;
+  let   totalCost     = 0;
+  let   curEmployee   = null;
+  let   curDate       = '';
+
+  rows.forEach(r => {
+    const vals    = Object.values(r);
+    const dateRaw = String(vals[0]||'').trim();
+    const empCol  = String(vals[1]||'').trim();
+    const lineCol = String(vals[2]||'').trim();
+    const prodCol = String(vals[3]||'').trim();
+    const hrsCol  = sf(vals[4]);
+
+    // Skip header/instruction rows
+    if(dateRaw.toLowerCase().includes('date') || dateRaw.includes('─') || dateRaw.includes('Paste')) return;
+    if(prodCol.includes('─')) return;
+
+    // Update current date if this row has one
+    if(dateRaw) {
+      const nd = normaliseDate(dateRaw);
+      if(nd && /^20[0-9]{2}/.test(nd)) curDate = nd;
+    }
+
+    // Skip if outside date range
+    if(!curDate || curDate < from || curDate > to) return;
+
+    // Track employee (Total rows have employee name in col B)
+    if(lineCol === 'Total' && empCol) {
+      curEmployee = empCol;
+      employeeSet.add(curEmployee);
+      return; // Total rows don't have line/product detail
+    }
+
+    // Detail rows — aggregate hours
+    if(hrsCol > 0 && lineCol) {
+      daysSet.add(curDate);
+      totalHours += hrsCol;
+      totalCost  += hrsCol * EMPLOYMENT_RATES.blendedHr;
+
+      // Line totals
+      if(!lineTotals[lineCol]) lineTotals[lineCol] = { hours:0, cost:0 };
+      lineTotals[lineCol].hours = parseFloat((lineTotals[lineCol].hours + hrsCol).toFixed(2));
+      lineTotals[lineCol].cost  += Math.round(hrsCol * EMPLOYMENT_RATES.blendedHr);
+
+      // Product totals — key = line|product
+      const key = `${lineCol}|${prodCol}`;
+      if(!productTotals[key]) productTotals[key] = { line:lineCol, product:prodCol, hours:0, employees:new Set(), cost:0 };
+      productTotals[key].hours = parseFloat((productTotals[key].hours + hrsCol).toFixed(2));
+      productTotals[key].cost  += Math.round(hrsCol * EMPLOYMENT_RATES.blendedHr);
+      if(curEmployee) productTotals[key].employees.add(curEmployee);
+
+      // Daily totals
+      if(!dailyTotals[curDate]) dailyTotals[curDate] = { hours:0, cost:0 };
+      dailyTotals[curDate].hours = parseFloat((dailyTotals[curDate].hours + hrsCol).toFixed(2));
+      dailyTotals[curDate].cost  += Math.round(hrsCol * EMPLOYMENT_RATES.blendedHr);
+    }
+  });
+
+  // Convert employee Sets to counts
+  const productTotalsClean = {};
+  Object.entries(productTotals).forEach(([key, val]) => {
+    productTotalsClean[key] = {
+      line:      val.line,
+      product:   val.product,
+      hours:     val.hours,
+      employees: val.employees.size,
+      cost:      val.cost,
+    };
+  });
+
+  return {
+    filesFound:    daysSet.size,
+    daysFound:     daysSet.size,
+    filesProcessed:daysSet.size,
+    availableDates:[...daysSet].sort(),
+    employees:     employeeSet.size,
+    totalHours:    parseFloat(totalHours.toFixed(2)),
+    totalCost:     Math.round(totalCost),
+    lineTotals,
+    productTotals: productTotalsClean,
+    dailyTotals,
+    rates: {
+      blendedHr: EMPLOYMENT_RATES.blendedHr,
+    },
+  };
+}
+
 // ── PRODUCTION SOURCES — Standard headcount and output per product ────────────
 // Loaded from sources sheet CSV via prodSrc URL — updated automatically
 // Format: { 'Product Name|Stage': { headcount, csPerHr, line, kgPerCS } }
@@ -714,8 +813,8 @@ async function connectAll(){
   if(bt)bt.textContent='⏳ Connecting to all data sources…';
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
 
-  const [waData,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows]=await Promise.all([
-    fetchWebApp(URLS.labour,from,to),
+  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows]=await Promise.all([
+    fetchCSV(URLS.labourCSV),
     fetchCSV(URLS.eng),
     fetchCSV(URLS.elecDaily),
     fetchCSV(URLS.elecBill),
@@ -724,8 +823,10 @@ async function connectAll(){
     fetchCSV(URLS.prodSrc),
   ]);
 
-  // Store data
-  if(waData)allocData=waData;
+  // Parse labour allocation CSV
+  if(labRows.length > 0) {
+    allocData = parseLabourCSV(labRows, from, to);
+  }
   engData   = filterByDate(engRows,'date',from,to);
   elecDaily = filterByDate(elecDRows,'date',from,to);
   elecBill  = elecBRows; // all months
@@ -783,16 +884,10 @@ async function connectAll(){
 
   // Build status
   const parts=[];
-  if(waData) {
-    // Always count Labour as connected if Web App responded
-    if(waData.filesFound>0) {
-      parts.push(`✅ Labour: ${waData.filesFound} day(s) · ${waData.totalHours.toFixed(1)}h · LKR ${Math.round(waData.totalCost).toLocaleString()}`);
-    } else if(waData.availableDates&&waData.availableDates.length>0) {
-      // Web App connected but no files for THIS date range - still count as connected
-      parts.push(`⚠️ Labour: no files for range · Available: ${waData.availableDates.join(', ')}`);
-    } else {
-      parts.push(`✅ Labour: connected (no files yet in folder)`);
-    }
+  if(allocData && allocData.totalHours > 0) {
+    parts.push(`✅ Labour: ${allocData.daysFound} day(s) · ${allocData.totalHours.toFixed(1)}h · LKR ${Math.round(allocData.totalCost).toLocaleString()}`);
+  } else if(labRows.length > 0) {
+    parts.push(`⚠️ Labour: CSV connected (${labRows.length} rows) but no data for selected range`);
   }
   if(engRows.length>0)parts.push(`✅ Maintenance: ${engData.length} entries`);
   if(elecDRows.length>0)parts.push(`✅ Electricity: ${elecDaily.length} daily records`);
