@@ -558,18 +558,23 @@ let PROD_STANDARDS = {};  // populated from sources sheet on connect
 function buildProdStandards(srcRows) {
   PROD_STANDARDS = {};
   srcRows.forEach(r => {
-    // Column mapping: B=product, C=stage, D=headcount, E=cs_per_hr, H=kg_per_cs, K=line
-    const product   = String(r['fg_sku'] || r[Object.keys(r)[1]] || '').trim();
-    const stage     = String(r[''] || r[Object.keys(r)[2]] || '').trim();
-    const headcount = parseFloat(Object.values(r)[3]) || 0;
-    const csPerHr   = parseFloat(Object.values(r)[4]) || 0;
-    const kgPerCS   = parseFloat(Object.values(r)[7]) || 0;
-    const line      = String(Object.values(r)[10] || '').trim();
+    // Sources sheet CSV columns (after parsing):
+    // col[0]=empty, col[1]=fg_sku, col[2]=stage, col[3]=headcount, 
+    // col[4]=hr_cs_batch, col[6]=shift_target, col[7]=per_cs_kg, col[10]=line
+    const vals    = Object.values(r);
+    const keys    = Object.keys(r);
+    // Try named keys first, fall back to positional
+    const product   = String(r['fg_sku'] || vals[1] || '').trim();
+    const stage     = String(r[''] || vals[2] || '').trim();
+    const headcount = parseFloat(vals[3]) || 0;
+    const csPerHr   = parseFloat(vals[4]) || 0;
+    const kgPerCS   = parseFloat(vals[7]) || 0;
+    const line      = String(vals[10] || '').trim();
 
-    if(product && headcount > 0) {
-      const key = product;
-      if(!PROD_STANDARDS[key] || csPerHr > 0) {
-        PROD_STANDARDS[key] = { headcount, csPerHr, kgPerCS, line, stage };
+    if(product && product !== 'FG SKU' && headcount > 0) {
+      // Only store if this stage has output (csPerHr > 0) or no entry yet
+      if(!PROD_STANDARDS[product] || csPerHr > 0) {
+        PROD_STANDARDS[product] = { headcount, csPerHr, kgPerCS, line, stage };
       }
     }
   });
@@ -670,6 +675,8 @@ async function connectAll(){
   elecBill  = elecBRows; // all months
   capexData = capRows;
   prodData  = filterByDate(prodRows,'date',from,to);
+  console.log('prodData rows:', prodData.length, 'from', prodRows.length, 'total');
+  if(prodRows.length > 0) console.log('First prodRow keys:', Object.keys(prodRows[0]).join(', '));
   if(srcRows.length>0) parseProdSources(srcRows);
 
   // Build status
@@ -710,11 +717,12 @@ async function connectAll(){
 
   // Always render - even if some sources have no data for selected range
   renderAll();
-  // Explicitly re-render labour section since allocData is now set
+  // Explicitly re-render sections that depend on allocData
   const c2 = calcCosts($('f-from').value, $('f-to').value);
   renderLabour(c2);
   renderLiveAlloc();
   renderAlloc();
+  renderHourlyRates();
 }
 
 // ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
@@ -827,10 +835,10 @@ function renderHourlyRates() {
   const prodActuals = {};
   prodData.forEach(r => {
     const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
-    const product = String(r['product_sku']||r['product']||r[Object.keys(r)[4]]||'').trim();
-    const runHrs  = sf(r['run_time_hr']||r['run_time']||Object.values(r)[11]||0);
-    const actCS   = sf(r['actual_out_put_cs']||r['actual_cs']||Object.values(r)[15]||0);
-    const actKg   = sf(r['actual_out_put_kg']||r['actual_kg']||Object.values(r)[16]||0);
+    const product = String(r['product_sku']||r['product']||'').trim();
+    const runHrs  = sf(r['run_time_hr']||0);
+    const actCS   = sf(r['actual_out_put_cs']||0);
+    const actKg   = sf(r['actual_out_put_kg']||0);
 
     if(product && (actCS > 0 || actKg > 0)) {
       if(!prodActuals[product]) prodActuals[product] = { runHrs:0, actCS:0, actKg:0 };
