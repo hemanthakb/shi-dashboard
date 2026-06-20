@@ -599,10 +599,10 @@ function parseLabourCSV(rows, from, to) {
     if(empCol === 'Total' && !lineCol && !prodCol) return;
 
     // Employee Total row — closes out the current block
+    // NOTE: employee counting happens in Pass 2 (after date filtering), not here,
+    // otherwise employees from outside the selected date range get counted too.
     if(lineCol === 'Total' && empCol) {
       blocks.push({ date: curDate, employee: empCol, rows: curBlockRows });
-      curEmployee = empCol;
-      employeeSet.add(curEmployee);
       curBlockRows = [];
       return;
     }
@@ -620,6 +620,8 @@ function parseLabourCSV(rows, from, to) {
   // ── PASS 2: backward-fill blank lines within each block, then aggregate ──
   blocks.forEach(block => {
     if(block.date < from || block.date > to) return;
+
+    employeeSet.add(block.employee);
 
     // Backward fill: scan from end to start, carry the next known line backward
     let lastKnownLine = '';
@@ -1342,7 +1344,7 @@ function renderKPIs(rows,c){
   const eff=pp>0?(pa/pp*100).toFixed(1):0;
   const kpis=[
     {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
-    {c:'blue',l:'Labour Cost',v:fmt(c.labourCost),s:allocData?`${allocData.employees} employees · ${(allocData.totalHours||0).toFixed(1)} hrs`:'Production DB',b:fmtKg(c.labPerKg),bt:'neu'},
+    {c:'blue',l:'Labour Cost',v:fmt(c.labourCost),s:allocData&&allocData.totalHours>0?`${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:fmtKg(c.labPerKg),bt:'neu'},
     {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
     {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
@@ -1357,19 +1359,10 @@ function renderAlerts(rows,c){
   if(!allocData&&engData.length===0&&elecDaily.length===0)
     alerts.push({t:'blue',i:'ℹ️',title:'No live data connected yet',body:'Click 🔌 Connect All to load Labour Allocation, Maintenance and Electricity data for the selected date range.'});
   if(allocData&&allocData.filesFound===0) {
-    const avail = (allocData.availableDates||[]);
-    const inRange = avail.filter(d=>d>=$('f-from').value&&d<=$('f-to').value);
-    if(avail.length>0) {
-      alerts.push({t:'amber',i:'⚠️',
-        title:'No Labour Allocation files for selected dates',
-        body:`No files found for selected range. Available dates in folder: ${avail.join(', ')}. Adjust date range to match available files.`
-      });
-    } else {
-      alerts.push({t:'amber',i:'⚠️',
-        title:'No Labour Allocation files found in Drive folder',
-        body:'Upload DD.MM.YY Labor Allocation.xlsx files to your Drive folder to see labour costs.'
-      });
-    }
+    alerts.push({t:'amber',i:'⚠️',
+      title:'No Labour Allocation data for selected dates',
+      body:'The Labour Allocation Master sheet does not have entries within this date range yet. Adjust the date range or ask the team to add data for these days.'
+    });
   }
   // Live allocation alerts
   if(allocData&&allocData.filesFound>0&&allocData.lineTotals) {
