@@ -847,11 +847,16 @@ async function fetchCSV(url){
     const lines=txt.trim().split('\n');
     if(lines.length<2)return[];
     const parseRow=row=>{const res=[];let cur='',inQ=false;for(let i=0;i<row.length;i++){const ch=row[i];if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){res.push(cur.trim());cur='';}else cur+=ch;}res.push(cur.trim());return res;};
-    // Find real header row — must have multiple short field-name cells
-    // A real header row has several non-empty cells that are SHORT field names
-    // Instruction rows have long sentences in first cell
+    // Find real header row — must have multiple SHORT field-name cells, with at
+    // least one cell being an exact (not substring) match to a known field name.
+    // Sheets with multi-row titles (e.g. "Line - SKU - Stage" / "DOC. NO" labels
+    // above the real header) can falsely match on substrings like "sku" inside a
+    // longer label — so we require an EXACT cell match for the strongest signal
+    // (date/month/asset), and only fall back to substring matching as a weaker check.
+    const EXACT_HEADER_WORDS = ['date','month','asset','line','product','sku','headcount'];
     let headerIdx=0;
-    for(let i=0;i<Math.min(6,lines.length);i++){
+    let bestScore = -1;
+    for(let i=0;i<Math.min(8,lines.length);i++){
       const vals=parseRow(lines[i]).map(v=>v.replace(/"/g,'').trim());
       const nonEmpty=vals.filter(v=>v!=='').length;
       const firstNonEmpty=(vals.find(v=>v!=='')||'').toLowerCase();
@@ -860,15 +865,26 @@ async function fetchCSV(url){
       if(firstLen > 30) continue;
       // Skip fully empty rows
       if(nonEmpty === 0) continue;
-      const joined=vals.join('|').toLowerCase();
-      const hasFieldNames = (joined.includes('date') || joined.includes('month') || joined.includes('asset')
+      const lowerVals = vals.map(v=>v.toLowerCase().trim());
+      const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v));
+      if(hasDataDate) continue; // never treat an actual data row as header
+
+      // Exact match scoring: count how many cells exactly equal a known field word
+      const exactMatches = lowerVals.filter(v => EXACT_HEADER_WORDS.includes(v)).length;
+      // Weak substring fallback score (only used if no exact-match row found anywhere)
+      const joined=lowerVals.join('|');
+      const hasFieldNamesSubstring = (joined.includes('date') || joined.includes('month') || joined.includes('asset')
                            || joined.includes('sku') || joined.includes('labor') || joined.includes('labour')
                            || joined.includes('headcount') || joined.includes('product'))
                          && nonEmpty >= 3;
-      if(hasFieldNames){
-        // Make sure it's not a data row
-        const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v));
-        if(!hasDataDate){ headerIdx=i; break; }
+
+      if(exactMatches >= 2) {
+        // Strong signal: multiple cells are exact field-name matches. Best possible header row.
+        headerIdx = i; bestScore = 1000; break;
+      } else if(exactMatches === 1 && bestScore < 100) {
+        headerIdx = i; bestScore = 100;
+      } else if(hasFieldNamesSubstring && bestScore < 10) {
+        headerIdx = i; bestScore = 10;
       }
     }
     const hdrs=parseRow(lines[headerIdx]).map(h=>h.replace(/"/g,'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
@@ -1025,6 +1041,19 @@ async function connectAll(){
     
     console.log('prodData rows:', prodData.length, 'from', prodRows.length, 'total, range:', from, 'to', to);
     if(prodData.length > 0) console.log('Sample:', JSON.stringify(prodData[0]));
+    // Extra debug: show raw dateVal for first 5 rows BEFORE date filtering, to diagnose date parsing
+    const rawDateDebug = prodRows.slice(0,5).map(r => {
+      const vals = Object.values(r);
+      let dv = '';
+      for(let i=0;i<vals.length;i++){
+        const v = String(vals[i]||'').trim();
+        if(!dv && (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v))) {
+          dv = v + ' -> ' + normaliseDate(v, 'MD');
+        }
+      }
+      return dv || '(no date found in row)';
+    });
+    console.log('prodDB raw date samples (first 5 rows):', JSON.stringify(rawDateDebug));
   } else {
     prodData = [];
   }
