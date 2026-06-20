@@ -889,11 +889,24 @@ async function fetchCSV(url){
     }
     const hdrs=parseRow(lines[headerIdx]).map(h=>h.replace(/"/g,'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
     console.log('CSV hdrs['+headerIdx+']',url.slice(-25),hdrs.slice(0,6).join(','));
-    return lines.slice(headerIdx+1).map(line=>{
+    if(url.includes('prodDB') || url.slice(-25).includes('592000704') || url.includes('2PACX-1vS4xx')){
+      console.log('PRODDB-DEBUG total lines fetched:', lines.length);
+      console.log('PRODDB-DEBUG headerIdx chosen:', headerIdx);
+      console.log('PRODDB-DEBUG FULL header row text:', JSON.stringify(lines[headerIdx]));
+      console.log('PRODDB-DEBUG ALL hdrs after normalisation:', JSON.stringify(hdrs));
+      console.log('PRODDB-DEBUG first data line raw text:', JSON.stringify(lines[headerIdx+1]));
+    }
+    const result = lines.slice(headerIdx+1).map(line=>{
       const vals=parseRow(line);const obj={};
       hdrs.forEach((h,i)=>{obj[h]=vals[i]?vals[i].replace(/"/g,'').trim():'';});
       return obj;
     }).filter(r=>Object.values(r).filter(v=>v!=='').length>=1);
+    if(url.includes('prodDB') || url.slice(-25).includes('592000704') || url.includes('2PACX-1vS4xx')){
+      console.log('PRODDB-DEBUG result.length:', result.length);
+      console.log('PRODDB-DEBUG result[0]:', JSON.stringify(result[0]));
+      console.log('PRODDB-DEBUG result[1]:', JSON.stringify(result[1]));
+    }
+    return result;
   }catch(e){console.error('CSV error:',url.slice(-30),e);return[];}
 }
 
