@@ -607,6 +607,10 @@ function parseLabourCSV(rows, from, to) {
       return;
     }
 
+    // Skip stray rows with no line AND no product (e.g. leftover cumulative-total
+    // cells from the ERP export that have only a number, no context)
+    if(!lineCol && !prodCol) return;
+
     // Detail row — accumulate into current block (don't filter by date yet)
     if(hrsCol > 0) {
       curBlockRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
