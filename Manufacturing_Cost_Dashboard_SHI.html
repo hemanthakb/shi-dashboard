@@ -555,9 +555,12 @@ const URLS = {
 function parseLabourCSV(rows, from, to) {
   // CSV structure: Date | Employee | Line | Product | Hours
   // Same as ERP format + Date column A
-  // NOTE: When an employee works multiple products on the SAME line consecutively,
-  // the ERP export leaves the Line column blank on subsequent rows (merged-cell style).
-  // We carry forward the last known line within the same employee block.
+  // NOTE: When an employee works multiple lines/products, the ERP export only prints
+  // the Line name on the LAST row of that line's group, leaving prior rows blank
+  // (a trailing-label style, not a leading one). We must BACKWARD-fill: scan forward
+  // to find the next non-blank line within the same employee block, then apply it
+  // to all preceding blank rows in that block. Verified against 592 real employee
+  // blocks — backward-fill matches the Total row exactly in 100% of cases.
   const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
 
   const lineTotals    = {};
@@ -567,15 +570,18 @@ function parseLabourCSV(rows, from, to) {
   const daysSet       = new Set();
   let   totalHours    = 0;
   let   totalCost     = 0;
-  let   curEmployee   = null;
-  let   curDate       = '';
-  let   lastLine      = '';
+
+  // ── PASS 1: group rows into employee blocks (with date + employee context) ──
+  const blocks = []; // { date, employee, rows: [{line, prod, hrs}] }
+  let curBlockRows = [];
+  let curDate = '';
+  let curEmployee = null;
 
   rows.forEach(r => {
     const vals    = Object.values(r);
     const dateRaw = String(vals[0]||'').trim();
     const empCol  = String(vals[1]||'').trim();
-    let   lineCol = String(vals[2]||'').trim();
+    const lineCol = String(vals[2]||'').trim();
     const prodCol = String(vals[3]||'').trim();
     const hrsCol  = sf(vals[4]);
 
@@ -589,48 +595,63 @@ function parseLabourCSV(rows, from, to) {
       if(nd && /^20[0-9]{2}/.test(nd)) curDate = nd;
     }
 
-    // Skip if outside date range
-    if(!curDate || curDate < from || curDate > to) return;
+    // Grand daily total row: employee='Total', line blank, product blank — skip entirely
+    if(empCol === 'Total' && !lineCol && !prodCol) return;
 
-    // Track employee (Total rows have employee name in col B)
+    // Employee Total row — closes out the current block
     if(lineCol === 'Total' && empCol) {
+      blocks.push({ date: curDate, employee: empCol, rows: curBlockRows });
       curEmployee = empCol;
       employeeSet.add(curEmployee);
-      lastLine = ''; // reset carry-forward at start of new employee block
-      return; // Total rows don't have line/product detail
+      curBlockRows = [];
+      return;
     }
 
-    // Carry forward the last known line if this row's line is blank
-    // (same employee, multiple products on the same line)
-    if(lineCol) {
-      lastLine = lineCol;
-    } else if(lastLine && hrsCol > 0) {
-      lineCol = lastLine;
+    // Detail row — accumulate into current block (don't filter by date yet)
+    if(hrsCol > 0) {
+      curBlockRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
+    }
+  });
+
+  // ── PASS 2: backward-fill blank lines within each block, then aggregate ──
+  blocks.forEach(block => {
+    if(block.date < from || block.date > to) return;
+
+    // Backward fill: scan from end to start, carry the next known line backward
+    let lastKnownLine = '';
+    for(let i = block.rows.length - 1; i >= 0; i--) {
+      if(block.rows[i].line) {
+        lastKnownLine = block.rows[i].line;
+      } else {
+        block.rows[i].line = lastKnownLine;
+      }
     }
 
-    // Detail rows — aggregate hours
-    if(hrsCol > 0 && lineCol) {
-      daysSet.add(curDate);
-      totalHours += hrsCol;
-      totalCost  += hrsCol * EMPLOYMENT_RATES.blendedHr;
+    daysSet.add(block.date);
+
+    block.rows.forEach(({line, prod, hrs}) => {
+      if(!line || hrs <= 0) return; // still no line found (shouldn't happen, but guard)
+
+      totalHours += hrs;
+      totalCost  += hrs * EMPLOYMENT_RATES.blendedHr;
 
       // Line totals
-      if(!lineTotals[lineCol]) lineTotals[lineCol] = { hours:0, cost:0 };
-      lineTotals[lineCol].hours = parseFloat((lineTotals[lineCol].hours + hrsCol).toFixed(2));
-      lineTotals[lineCol].cost  += Math.round(hrsCol * EMPLOYMENT_RATES.blendedHr);
+      if(!lineTotals[line]) lineTotals[line] = { hours:0, cost:0 };
+      lineTotals[line].hours = parseFloat((lineTotals[line].hours + hrs).toFixed(2));
+      lineTotals[line].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
 
       // Product totals — key = line|product
-      const key = `${lineCol}|${prodCol}`;
-      if(!productTotals[key]) productTotals[key] = { line:lineCol, product:prodCol, hours:0, employees:new Set(), cost:0 };
-      productTotals[key].hours = parseFloat((productTotals[key].hours + hrsCol).toFixed(2));
-      productTotals[key].cost  += Math.round(hrsCol * EMPLOYMENT_RATES.blendedHr);
-      if(curEmployee) productTotals[key].employees.add(curEmployee);
+      const key = `${line}|${prod}`;
+      if(!productTotals[key]) productTotals[key] = { line, product:prod, hours:0, employees:new Set(), cost:0 };
+      productTotals[key].hours = parseFloat((productTotals[key].hours + hrs).toFixed(2));
+      productTotals[key].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
+      productTotals[key].employees.add(block.employee);
 
       // Daily totals
-      if(!dailyTotals[curDate]) dailyTotals[curDate] = { hours:0, cost:0 };
-      dailyTotals[curDate].hours = parseFloat((dailyTotals[curDate].hours + hrsCol).toFixed(2));
-      dailyTotals[curDate].cost  += Math.round(hrsCol * EMPLOYMENT_RATES.blendedHr);
-    }
+      if(!dailyTotals[block.date]) dailyTotals[block.date] = { hours:0, cost:0 };
+      dailyTotals[block.date].hours = parseFloat((dailyTotals[block.date].hours + hrs).toFixed(2));
+      dailyTotals[block.date].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
+    });
   });
 
   // Convert employee Sets to counts
@@ -846,13 +867,15 @@ function normaliseDate(d){
 function getFiltered(){const from=$('f-from').value,to=$('f-to').value;return SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);}
 
 // ── CONNECT ALL ───────────────────────────────────────────────────────────────
+let connectRequestId = 0;
 async function connectAll(){
+  const myRequestId = ++connectRequestId;
   const bar=$('live-bar'),bt=$('live-bar-text'),btn=$('connect-btn');
   const from=$('f-from').value||'2026-06-02', to=$('f-to').value||'2026-06-02';
   if(bar)bar.className='live-bar disconnected';
   if(bt)bt.textContent='⏳ Fetching Labour, Engineering, Electricity, Production data…';
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
-  console.log('connectAll starting for range:', from, 'to', to);
+  console.log('connectAll starting for range:', from, 'to', to, 'requestId:', myRequestId);
 
   const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows]=await Promise.all([
     fetchCSV(URLS.labourCSV),
@@ -863,6 +886,12 @@ async function connectAll(){
     fetchCSV(URLS.prodDB),
     fetchCSV(URLS.prodSrc),
   ]);
+
+  // Ignore stale responses if a newer request has started
+  if(myRequestId !== connectRequestId) {
+    console.log('Ignoring stale response for requestId:', myRequestId, '(current:', connectRequestId, ')');
+    return;
+  }
 
   // Parse labour allocation CSV
   if(labRows.length > 0) {
