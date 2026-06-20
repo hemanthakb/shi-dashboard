@@ -554,13 +554,22 @@ const URLS = {
 // ── PARSE LABOUR ALLOCATION CSV ───────────────────────────────────────────────
 function parseLabourCSV(rows, from, to) {
   // CSV structure: Date | Employee | Line | Product | Hours
-  // Same as ERP format + Date column A
-  // NOTE: When an employee works multiple lines/products, the ERP export only prints
-  // the Line name on the LAST row of that line's group, leaving prior rows blank
-  // (a trailing-label style, not a leading one). We must BACKWARD-fill: scan forward
-  // to find the next non-blank line within the same employee block, then apply it
-  // to all preceding blank rows in that block. Verified against 592 real employee
-  // blocks — backward-fill matches the Total row exactly in 100% of cases.
+  //
+  // Supports BOTH row styles, auto-detected per block:
+  //  (A) OLD STYLE: Employee name appears only on the "Total" row that closes a
+  //      block; detail rows above it have a blank Employee cell.
+  //  (B) NEW STYLE: Employee name is filled on every row of the block (agreed
+  //      going-forward standard — simpler and unambiguous).
+  // In both styles, the Line column may be blank on some rows within a block when
+  // the same employee works multiple products on the same line consecutively, or
+  // when the ERP export trails the line label onto the last row of a group.
+  // We always backward-fill blank Line values within a block (verified to match
+  // sheet totals exactly in both styles).
+  //
+  // Detection: gather all rows between two "Total" markers into one block. If ANY
+  // detail row in that block has a non-blank Employee value, treat the WHOLE block
+  // as new-style (use that employee name). Otherwise treat it as old-style (the
+  // employee name comes from the block's own Total row, read after the fact).
   const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
 
   const lineTotals    = {};
@@ -571,11 +580,10 @@ function parseLabourCSV(rows, from, to) {
   let   totalHours    = 0;
   let   totalCost     = 0;
 
-  // ── PASS 1: group rows into employee blocks (with date + employee context) ──
   const blocks = []; // { date, employee, rows: [{line, prod, hrs}] }
-  let curBlockRows = [];
+  let curRows = [];
   let curDate = '';
-  let curEmployee = null;
+  let curDetailEmp = ''; // non-blank employee seen among detail rows (new-style signal)
 
   rows.forEach(r => {
     const vals    = Object.values(r);
@@ -585,11 +593,9 @@ function parseLabourCSV(rows, from, to) {
     const prodCol = String(vals[3]||'').trim();
     const hrsCol  = sf(vals[4]);
 
-    // Skip header/instruction rows
     if(dateRaw.toLowerCase().includes('date') || dateRaw.includes('─') || dateRaw.includes('Paste')) return;
     if(prodCol.includes('─')) return;
 
-    // Update current date if this row has one
     if(dateRaw) {
       const nd = normaliseDate(dateRaw);
       if(nd && /^20[0-9]{2}/.test(nd)) curDate = nd;
@@ -598,32 +604,31 @@ function parseLabourCSV(rows, from, to) {
     // Grand daily total row: employee='Total', line blank, product blank — skip entirely
     if(empCol === 'Total' && !lineCol && !prodCol) return;
 
-    // Employee Total row — closes out the current block
-    // NOTE: employee counting happens in Pass 2 (after date filtering), not here,
-    // otherwise employees from outside the selected date range get counted too.
+    // Total row closes the current block. Employee name here is authoritative for
+    // OLD-style blocks; for NEW-style blocks we already captured it from detail rows.
     if(lineCol === 'Total' && empCol) {
-      blocks.push({ date: curDate, employee: empCol, rows: curBlockRows });
-      curBlockRows = [];
+      const finalEmp = curDetailEmp || empCol;
+      blocks.push({ date: curDate, employee: finalEmp, rows: curRows });
+      curRows = [];
+      curDetailEmp = '';
       return;
     }
 
-    // Skip stray rows with no line AND no product (e.g. leftover cumulative-total
-    // cells from the ERP export that have only a number, no context)
-    if(!lineCol && !prodCol) return;
+    if(!lineCol && !prodCol) return; // stray row
+    if(hrsCol <= 0) return;
 
-    // Detail row — accumulate into current block (don't filter by date yet)
-    if(hrsCol > 0) {
-      curBlockRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
-    }
+    if(empCol) curDetailEmp = empCol; // new-style signal
+    curRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
   });
 
-  // ── PASS 2: backward-fill blank lines within each block, then aggregate ──
+  // Aggregate, applying backward-fill for blank lines within each block and date filter
   blocks.forEach(block => {
-    if(block.date < from || block.date > to) return;
+    if(!block.date || block.date < from || block.date > to) return;
+    if(!block.employee) return;
 
     employeeSet.add(block.employee);
+    daysSet.add(block.date);
 
-    // Backward fill: scan from end to start, carry the next known line backward
     let lastKnownLine = '';
     for(let i = block.rows.length - 1; i >= 0; i--) {
       if(block.rows[i].line) {
@@ -633,34 +638,28 @@ function parseLabourCSV(rows, from, to) {
       }
     }
 
-    daysSet.add(block.date);
-
     block.rows.forEach(({line, prod, hrs}) => {
-      if(!line || hrs <= 0) return; // still no line found (shouldn't happen, but guard)
+      if(!line || hrs <= 0) return;
 
       totalHours += hrs;
       totalCost  += hrs * EMPLOYMENT_RATES.blendedHr;
 
-      // Line totals
       if(!lineTotals[line]) lineTotals[line] = { hours:0, cost:0 };
       lineTotals[line].hours = parseFloat((lineTotals[line].hours + hrs).toFixed(2));
       lineTotals[line].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
 
-      // Product totals — key = line|product
       const key = `${line}|${prod}`;
       if(!productTotals[key]) productTotals[key] = { line, product:prod, hours:0, employees:new Set(), cost:0 };
       productTotals[key].hours = parseFloat((productTotals[key].hours + hrs).toFixed(2));
       productTotals[key].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
       productTotals[key].employees.add(block.employee);
 
-      // Daily totals
       if(!dailyTotals[block.date]) dailyTotals[block.date] = { hours:0, cost:0 };
       dailyTotals[block.date].hours = parseFloat((dailyTotals[block.date].hours + hrs).toFixed(2));
       dailyTotals[block.date].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
     });
   });
 
-  // Convert employee Sets to counts
   const productTotalsClean = {};
   Object.entries(productTotals).forEach(([key, val]) => {
     productTotalsClean[key] = {
@@ -689,7 +688,6 @@ function parseLabourCSV(rows, from, to) {
     },
   };
 }
-
 // ── PRODUCTION SOURCES — Standard headcount and output per product ────────────
 // Loaded from sources sheet CSV via prodSrc URL — updated automatically
 // Format: { 'Product Name|Stage': { headcount, csPerHr, line, kgPerCS } }
