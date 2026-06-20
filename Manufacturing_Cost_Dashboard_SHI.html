@@ -555,6 +555,9 @@ const URLS = {
 function parseLabourCSV(rows, from, to) {
   // CSV structure: Date | Employee | Line | Product | Hours
   // Same as ERP format + Date column A
+  // NOTE: When an employee works multiple products on the SAME line consecutively,
+  // the ERP export leaves the Line column blank on subsequent rows (merged-cell style).
+  // We carry forward the last known line within the same employee block.
   const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
 
   const lineTotals    = {};
@@ -566,12 +569,13 @@ function parseLabourCSV(rows, from, to) {
   let   totalCost     = 0;
   let   curEmployee   = null;
   let   curDate       = '';
+  let   lastLine      = '';
 
   rows.forEach(r => {
     const vals    = Object.values(r);
     const dateRaw = String(vals[0]||'').trim();
     const empCol  = String(vals[1]||'').trim();
-    const lineCol = String(vals[2]||'').trim();
+    let   lineCol = String(vals[2]||'').trim();
     const prodCol = String(vals[3]||'').trim();
     const hrsCol  = sf(vals[4]);
 
@@ -592,7 +596,16 @@ function parseLabourCSV(rows, from, to) {
     if(lineCol === 'Total' && empCol) {
       curEmployee = empCol;
       employeeSet.add(curEmployee);
+      lastLine = ''; // reset carry-forward at start of new employee block
       return; // Total rows don't have line/product detail
+    }
+
+    // Carry forward the last known line if this row's line is blank
+    // (same employee, multiple products on the same line)
+    if(lineCol) {
+      lastLine = lineCol;
+    } else if(lastLine && hrsCol > 0) {
+      lineCol = lastLine;
     }
 
     // Detail rows — aggregate hours
