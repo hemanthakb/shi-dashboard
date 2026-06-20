@@ -572,13 +572,14 @@ function parseLabourCSV(rows, from, to) {
   // employee name comes from the block's own Total row, read after the fact).
   const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
 
-  const lineTotals    = {};
-  const productTotals = {};
-  const dailyTotals   = {};
-  const employeeSet   = new Set();
-  const daysSet       = new Set();
-  let   totalHours    = 0;
-  let   totalCost     = 0;
+  const lineTotals       = {};
+  const productTotals    = {};
+  const dailyTotals      = {};
+  const employeeSet      = new Set();
+  const daysSet          = new Set();
+  const employeeDayTotals= {}; // key = `${date}|${employee}` -> total hours that day, for OT calc
+  let   totalHours       = 0;
+  let   totalCost        = 0;
 
   const blocks = []; // { date, employee, rows: [{line, prod, hrs}] }
   let curRows = [];
@@ -629,6 +630,9 @@ function parseLabourCSV(rows, from, to) {
     employeeSet.add(block.employee);
     daysSet.add(block.date);
 
+    const edKey = `${block.date}|${block.employee}`;
+    if(!employeeDayTotals[edKey]) employeeDayTotals[edKey] = { date: block.date, employee: block.employee, hours: 0 };
+
     let lastKnownLine = '';
     for(let i = block.rows.length - 1; i >= 0; i--) {
       if(block.rows[i].line) {
@@ -643,6 +647,7 @@ function parseLabourCSV(rows, from, to) {
 
       totalHours += hrs;
       totalCost  += hrs * EMPLOYMENT_RATES.blendedHr;
+      employeeDayTotals[edKey].hours = parseFloat((employeeDayTotals[edKey].hours + hrs).toFixed(2));
 
       if(!lineTotals[line]) lineTotals[line] = { hours:0, cost:0 };
       lineTotals[line].hours = parseFloat((lineTotals[line].hours + hrs).toFixed(2));
@@ -671,7 +676,36 @@ function parseLabourCSV(rows, from, to) {
     };
   });
 
+  // ── OT CALCULATION ───────────────────────────────────────────────────────
+  // Rule (confirmed with user): per employee, per day, hours above 9 on a
+  // normal day are OT at 1.5x. On a Sunday or Poya day, the ENTIRE day's
+  // hours are at 2.0x (DOT) instead of the normal 1.0x/1.5x split.
+  // This requires per-employee-per-day totals (employeeDayTotals), not just
+  // an aggregate hours-vs-capacity estimate.
+  const blendedHr = EMPLOYMENT_RATES.blendedHr;
+  let normalHours = 0, otHours = 0, dotHours = 0;
+  let normalCost  = 0, otCost  = 0, dotCost  = 0;
+
+  Object.values(employeeDayTotals).forEach(({date, hours}) => {
+    if(hours <= 0) return;
+    if(isSundayOrPoya(date)) {
+      dotHours += hours;
+      dotCost  += hours * blendedHr * 2.0;
+    } else if(hours > 9) {
+      const normalPart = 9;
+      const otPart      = hours - 9;
+      normalHours += normalPart;
+      otHours     += otPart;
+      normalCost  += normalPart * blendedHr;
+      otCost      += otPart * blendedHr * 1.5;
+    } else {
+      normalHours += hours;
+      normalCost  += hours * blendedHr;
+    }
+  });
+
   console.log('parseLabourCSV: daysSet=', [...daysSet], 'totalHours=', totalHours, 'employees=', employeeSet.size, 'lines=', Object.keys(lineTotals).length);
+  console.log('parseLabourCSV OT breakdown: normal=', normalHours.toFixed(1), 'OT=', otHours.toFixed(1), 'DOT=', dotHours.toFixed(1));
   return {
     filesFound:    daysSet.size,
     daysFound:     daysSet.size,
@@ -683,6 +717,15 @@ function parseLabourCSV(rows, from, to) {
     lineTotals,
     productTotals: productTotalsClean,
     dailyTotals,
+    employeeDayTotals,
+    otBreakdown: {
+      normalHours: parseFloat(normalHours.toFixed(2)),
+      otHours:     parseFloat(otHours.toFixed(2)),
+      dotHours:    parseFloat(dotHours.toFixed(2)),
+      normalCost:  Math.round(normalCost),
+      otCost:      Math.round(otCost),
+      dotCost:     Math.round(dotCost),
+    },
     rates: {
       blendedHr: EMPLOYMENT_RATES.blendedHr,
     },
@@ -735,6 +778,23 @@ function buildProdStandards(srcRows) {
     const k = Object.keys(PROD_STANDARDS)[0];
     console.log('Sample:', k, '=', JSON.stringify(PROD_STANDARDS[k]));
   }
+}
+
+// ── SRI LANKA POYA DAYS (2026) — sourced from publicholidays.lk Government Gazette ──
+// NOTE: Poya dates follow the Buddhist lunar calendar and shift every year.
+// This list must be updated annually. Currently covers 2026 only.
+const POYA_DAYS_2026 = new Set([
+  '2026-01-03','2026-02-01','2026-03-02','2026-04-01','2026-05-01','2026-05-02',
+  '2026-05-30','2026-06-29','2026-07-29','2026-08-27','2026-09-26','2026-10-25',
+  '2026-11-24','2026-12-23'
+]);
+
+function isSundayOrPoya(dateStr) {
+  if(!dateStr) return false;
+  const d = new Date(dateStr + 'T00:00:00');
+  const isSunday = d.getDay() === 0;
+  const isPoya = POYA_DAYS_2026.has(dateStr);
+  return isSunday || isPoya;
 }
 
 // ── EMPLOYMENT COST RATES (confirmed from Production DB sources sheet) ────────
@@ -1461,17 +1521,16 @@ function renderLabour(c){
     const totalHrs = allocData.totalHours;
     const days     = allocData.filesFound;
     const emps     = allocData.employees;
-    const normalCap= emps * days * 8;
-    const normHrs  = Math.min(totalHrs, normalCap);
-    const otHrs    = Math.max(0, totalHrs - normalCap);
-    const normCost = normHrs * hr;
-    const otCost   = otHrs * hr * 1.5;
     const labTotal = allocData.totalCost || (totalHrs * hr);
     const src = `${days} day(s) · ${emps} employees · ERP`;
 
+    // OT/DOT calculated per-employee-per-day (>9hrs/day = OT 1.5x; Sunday/Poya = DOT 2.0x for the whole day)
+    const otb = allocData.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
+
     $('labour-kpis').innerHTML=`
-      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(normCost)}</div><div class="ksub">${normHrs.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otCost)}</div><div class="ksub">${otHrs.toFixed(1)} hrs above normal capacity</div></div>
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div></div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days</div></div>
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>
       <div class="stream-card" style="border-top-color:var(--teal)"><div class="klbl">Labour Cost / kg</div><div class="kval" style="font-size:18px;color:var(--teal)">${fmtKg(c.labPerKg)}</div><div class="ksub">Based on ${Math.round(c.totalKg).toLocaleString()} kg produced</div></div>`;
   } else {
