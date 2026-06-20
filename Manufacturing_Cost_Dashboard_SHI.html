@@ -903,14 +903,18 @@ function filterByDate(rows,dateCol,from,to){
   });
 }
 
-function normaliseDate(d){
+// normaliseDate: converts various date string formats to YYYY-MM-DD.
+// preferFormat: 'DM' (day-first, default — Labour Allocation Master, which stores
+//   plain DD/MM/YYYY text) or 'MD' (month-first — Production DB, Engineering,
+//   Electricity, Capex sheets, which use real Excel Date-type cells that Google
+//   Sheets always exports as M/D/YYYY regardless of the cell's display format).
+function normaliseDate(d, preferFormat){
   if(!d) return '';
   d = d.trim();
+  preferFormat = preferFormat || 'DM';
   // Already YYYY-MM-DD or timestamp
   if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(d)) return d.slice(0,10);
-  // X/X/YYYY format — SHI standard is DD/MM/YYYY (confirmed with user).
-  // The Labour Allocation Master sheet stores dates as plain DD/MM/YYYY text
-  // (not auto-converted Sheets dates), so we read part1=day, part2=month.
+  // X/X/YYYY format
   const m1 = d.match(/^([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})/);
   if(m1) {
     const part1 = parseInt(m1[1]);
@@ -918,13 +922,16 @@ function normaliseDate(d){
     const year  = m1[3];
     let day, month;
     if(part1 > 12 && part2 <= 12) {
-      // part1 can't be a month -> must be DD/MM/YYYY
+      // part1 can't be a month -> must be DD/MM/YYYY regardless of preference
       day = part1; month = part2;
     } else if(part2 > 12 && part1 <= 12) {
-      // part2 can't be a month -> must be MM/DD/YYYY
+      // part2 can't be a month -> must be MM/DD/YYYY regardless of preference
+      month = part1; day = part2;
+    } else if(preferFormat === 'MD') {
+      // Ambiguous -> use month-first (Production DB / Excel Date-type export default)
       month = part1; day = part2;
     } else {
-      // Ambiguous (both <=12) -> default to DD/MM/YYYY, the agreed SHI standard
+      // Ambiguous -> use day-first (Labour Allocation Master plain-text standard)
       day = part1; month = part2;
     }
     return year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
@@ -991,7 +998,7 @@ async function connectAll(){
       for(let i=0;i<vals.length;i++){
         const v = String(vals[i]||'').trim();
         if(!dateVal && (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v))) {
-          dateVal=normaliseDate(v);
+          dateVal=normaliseDate(v, 'MD'); // Production DB: real Excel Date cells export as M/D/YYYY
         }
         if(!lineVal && /^[A-Z]{2,6}$/.test(v) && v!=='DAY'&&v!=='OEE') lineVal=v;
       }
