@@ -756,16 +756,17 @@ async function fetchCSV(url){
     for(let i=0;i<Math.min(6,lines.length);i++){
       const vals=parseRow(lines[i]).map(v=>v.replace(/"/g,'').trim());
       const nonEmpty=vals.filter(v=>v!=='').length;
-      const firstVal=vals[0].toLowerCase();
-      const firstLen=firstVal.length;
-      // Skip rows where first cell is a long sentence (title/instruction rows)
+      const firstNonEmpty=(vals.find(v=>v!=='')||'').toLowerCase();
+      const firstLen=firstNonEmpty.length;
+      // Skip rows where the first non-empty cell is a long sentence (title/instruction rows)
       if(firstLen > 30) continue;
-      // Real header: multiple non-empty cells, first cell is short field name
-      // Check if this looks like a header (contains recognizable SHORT field names)
+      // Skip fully empty rows
+      if(nonEmpty === 0) continue;
       const joined=vals.join('|').toLowerCase();
-      const hasFieldNames = (joined.includes('date') || joined.includes('month') || joined.includes('asset')) 
-                         && nonEmpty >= 3
-                         && firstLen <= 30;
+      const hasFieldNames = (joined.includes('date') || joined.includes('month') || joined.includes('asset')
+                           || joined.includes('sku') || joined.includes('labor') || joined.includes('labour')
+                           || joined.includes('headcount') || joined.includes('product'))
+                         && nonEmpty >= 3;
       if(hasFieldNames){
         // Make sure it's not a data row
         const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v));
