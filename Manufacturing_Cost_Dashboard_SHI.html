@@ -909,12 +909,16 @@ async function fetchWebApp(url,from,to){
 }
 
 // ── FILTER DATA BY DATE ───────────────────────────────────────────────────────
-function filterByDate(rows,dateCol,from,to){
+function filterByDate(rows,dateCol,from,to,preferFormat){
+  // Engineering Costs, Electricity Daily, and Capex Register all use real Excel
+  // Date-type cells, which Google Sheets always exports as M/D/YYYY — so default
+  // to 'MD' here unless a caller explicitly requests day-first parsing.
+  preferFormat = preferFormat || 'MD';
   return rows.filter(r=>{
     let d=String(r[dateCol]||'').trim();
     if(!d) return false;
     // Normalise date to YYYY-MM-DD for comparison
-    d = normaliseDate(d);
+    d = normaliseDate(d, preferFormat);
     return d>=from&&d<=to;
   });
 }
