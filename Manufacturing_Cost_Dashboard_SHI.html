@@ -622,6 +622,12 @@ function parseLabourCSV(rows, from, to) {
     curRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
   });
 
+  console.log('LABOUR-DEBUG total blocks found:', blocks.length);
+  console.log('LABOUR-DEBUG all block dates (raw, before filter):', JSON.stringify(blocks.map(b=>b.date)));
+  console.log('LABOUR-DEBUG filter range from=', from, 'to=', to);
+  const uniqueBlockDates = [...new Set(blocks.map(b=>b.date))].sort();
+  console.log('LABOUR-DEBUG unique block dates:', JSON.stringify(uniqueBlockDates));
+
   // Aggregate, applying backward-fill for blank lines within each block and date filter
   blocks.forEach(block => {
     if(!block.date || block.date < from || block.date > to) return;
