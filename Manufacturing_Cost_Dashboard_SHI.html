@@ -623,12 +623,6 @@ function parseLabourCSV(rows, from, to) {
     curRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
   });
 
-  console.log('LABOUR-DEBUG total blocks found:', blocks.length);
-  console.log('LABOUR-DEBUG all block dates (raw, before filter):', JSON.stringify(blocks.map(b=>b.date)));
-  console.log('LABOUR-DEBUG filter range from=', from, 'to=', to);
-  const uniqueBlockDates = [...new Set(blocks.map(b=>b.date))].sort();
-  console.log('LABOUR-DEBUG unique block dates:', JSON.stringify(uniqueBlockDates));
-
   // Aggregate, applying backward-fill for blank lines within each block and date filter
   blocks.forEach(block => {
     if(!block.date || block.date < from || block.date > to) return;
@@ -1539,15 +1533,6 @@ function renderTrend(rows,c){
 
   const maintData = labDates.map(d=>Math.round(maintByDate[d]||0));
   const elecData  = labDates.map(d=>Math.round(elecByDate[d]||0));
-
-  console.log('TREND-DEBUG engData.length:', engData.length);
-  console.log('TREND-DEBUG engData sample (first 3):', JSON.stringify(engData.slice(0,3)));
-  console.log('TREND-DEBUG maintByDate:', JSON.stringify(maintByDate));
-  console.log('TREND-DEBUG labDates:', JSON.stringify(labDates));
-  console.log('TREND-DEBUG maintData (final array fed to chart):', JSON.stringify(maintData));
-  console.log('TREND-DEBUG elecDaily.length:', elecDaily.length);
-  console.log('TREND-DEBUG elecByDate:', JSON.stringify(elecByDate));
-  console.log('TREND-DEBUG elecData (final array fed to chart):', JSON.stringify(elecData));
 
   const trendCanvas=$('trendChart');if(!trendCanvas)return;
   charts.trend=new Chart(trendCanvas.getContext('2d'),{
