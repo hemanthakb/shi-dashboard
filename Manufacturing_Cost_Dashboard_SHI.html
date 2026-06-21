@@ -72,8 +72,8 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .main{padding:18px 24px;max-width:1500px;margin:0 auto;}
 
 /* ALERTS */
-.alert-zone{margin-bottom:16px;}
-.abar{border-radius:var(--rs);padding:10px 14px;display:flex;align-items:flex-start;gap:9px;margin-bottom:7px;border-left:4px solid;background:#fff;box-shadow:var(--shadow);}
+.alert-zone{margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;align-items:start;}
+.abar{border-radius:var(--rs);padding:10px 14px;display:flex;align-items:flex-start;gap:9px;border-left:4px solid;background:#fff;box-shadow:var(--shadow);}
 .abar.red{border-left-color:var(--red);background:var(--red-lt);}
 .abar.amber{border-left-color:var(--amber);background:var(--amber-lt);}
 .abar.green{border-left-color:var(--green);background:var(--green-lt);}
@@ -168,7 +168,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   @page{margin:12mm;size:A4 landscape;}
 }
 @media(max-width:768px){
-  .cgrid,.egrid,.otgrid{grid-template-columns:1fr;}
+  .cgrid,.egrid,.otgrid,.alert-zone{grid-template-columns:1fr;}
   .main{padding:10px 12px;}
   .hdr{padding:0 14px;}
   .filters{padding:8px 12px;}
@@ -1127,13 +1127,13 @@ function getProdActuals(from, to) {
   prodData.forEach(r => {
     const date    = String(r['date']||'').trim();
     const line    = String(r['line']||r['production_line']||'').trim();
-    const product = String(r['product']||r['product_description']||'').trim();
+    const product = String(r['product_sku']||r['product']||r['product_description']||'').trim();
     const runHrs  = sf(r['run_time_hr']||r['run_time']||r['runtime']||0);
-    const actCS   = sf(r['actual_cs']||r['actual_output_cs']||0);
-    const actKg   = sf(r['actual_kg']||r['actual_output_kg']||0);
-    const labHrs  = sf(r['actual_labour_hrs']||r['actual_hrs']||r['actual_labor_hrs']||0);
-    const planCS  = sf(r['planned_cs']||r['planned_output_cs']||0);
-    const planHrs = sf(r['planned_hrs']||r['planned_labour_hrs']||0);
+    const actCS   = sf(r['actual_out_put_cs']||r['actual_cs']||r['actual_output_cs']||0);
+    const actKg   = sf(r['actual_out_put_kg']||r['actual_kg']||r['actual_output_kg']||0);
+    const labHrs  = sf(r['actual_labour_hr']||r['actual_labour_hrs']||r['actual_hrs']||r['actual_labor_hrs']||0);
+    const planCS  = sf(r['planned_out_put_cs']||r['planned_cs']||r['planned_output_cs']||0);
+    const planHrs = sf(r['planned_labour_hr']||r['planned_hrs']||r['planned_labour_hrs']||0);
 
     if(!line) return;
     const isBatch = BATCH_LINES.includes(line);
@@ -1478,7 +1478,7 @@ function renderAlerts(rows,c){
   }
   if(!alerts.length)
     alerts.push({t:'green',i:'✅',title:'No critical cost alerts for selected period',body:'All monitored metrics within acceptable range.'});
-  $('alert-zone').innerHTML=alerts.map(a=>`<div class="abar ${a.t}"><span class="aicon">${a.i}</span><div><div class="atitle">${a.title}</div><div class="abody">${a.body}</div></div></div>`).join('');
+  $('alert-zone').innerHTML=alerts.map(a=>`<div class="abar ${a.t}"${alerts.length===1?' style="grid-column:1/-1"':''}><span class="aicon">${a.i}</span><div><div class="atitle">${a.title}</div><div class="abody">${a.body}</div></div></div>`).join('');
 }
 
 // ── RENDER TREND CHART ────────────────────────────────────────────────────────
