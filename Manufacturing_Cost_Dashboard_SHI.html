@@ -854,7 +854,6 @@ async function fetchCSV(url){
     // longer label — so we require an EXACT cell match for the strongest signal
     // (date/month/asset), and only fall back to substring matching as a weaker check.
     const EXACT_HEADER_WORDS = ['date','month','asset','line','product','sku','headcount'];
-    const isProdDBUrl = url.includes('2PACX-1vS4xx') || url.slice(-25).includes('592000704');
     let headerIdx=0;
     let bestScore = -1;
     for(let i=0;i<Math.min(8,lines.length);i++){
@@ -862,14 +861,13 @@ async function fetchCSV(url){
       const nonEmpty=vals.filter(v=>v!=='').length;
       const firstNonEmpty=(vals.find(v=>v!=='')||'').toLowerCase();
       const firstLen=firstNonEmpty.length;
-      if(isProdDBUrl) console.log('SCORING-DEBUG row',i,'nonEmpty=',nonEmpty,'firstNonEmpty=',JSON.stringify(firstNonEmpty.slice(0,40)),'firstLen=',firstLen);
       // Skip rows where the first non-empty cell is a long sentence (title/instruction rows)
-      if(firstLen > 30) { if(isProdDBUrl) console.log('  -> SKIP too long'); continue; }
+      if(firstLen > 30) continue;
       // Skip fully empty rows
-      if(nonEmpty === 0) { if(isProdDBUrl) console.log('  -> SKIP empty'); continue; }
+      if(nonEmpty === 0) continue;
       const lowerVals = vals.map(v=>v.toLowerCase().trim());
       const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v));
-      if(hasDataDate) { if(isProdDBUrl) console.log('  -> SKIP looks like data'); continue; }
+      if(hasDataDate) continue; // never treat an actual data row as header
 
       // Exact match scoring: count how many cells exactly equal a known field word
       const exactMatches = lowerVals.filter(v => EXACT_HEADER_WORDS.includes(v)).length;
@@ -879,42 +877,23 @@ async function fetchCSV(url){
                            || joined.includes('sku') || joined.includes('labor') || joined.includes('labour')
                            || joined.includes('headcount') || joined.includes('product'))
                          && nonEmpty >= 3;
-      if(isProdDBUrl) console.log('  exactMatches=',exactMatches,'hasFieldNamesSubstring=',hasFieldNamesSubstring,'currentBestScore=',bestScore);
 
       if(exactMatches >= 2) {
         // Strong signal: multiple cells are exact field-name matches. Best possible header row.
-        headerIdx = i; bestScore = 1000;
-        if(isProdDBUrl) console.log('  -> WINNER (strong), headerIdx=',i);
-        break;
+        headerIdx = i; bestScore = 1000; break;
       } else if(exactMatches === 1 && bestScore < 100) {
         headerIdx = i; bestScore = 100;
-        if(isProdDBUrl) console.log('  -> tentative winner (1 exact), headerIdx=',i);
       } else if(hasFieldNamesSubstring && bestScore < 10) {
         headerIdx = i; bestScore = 10;
-        if(isProdDBUrl) console.log('  -> tentative winner (substring), headerIdx=',i);
       }
     }
-    if(isProdDBUrl) console.log('SCORING-DEBUG FINAL headerIdx=',headerIdx,'bestScore=',bestScore);
     const hdrs=parseRow(lines[headerIdx]).map(h=>h.replace(/"/g,'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
     console.log('CSV hdrs['+headerIdx+']',url.slice(-25),hdrs.slice(0,6).join(','));
-    if(url.includes('prodDB') || url.slice(-25).includes('592000704') || url.includes('2PACX-1vS4xx')){
-      console.log('PRODDB-DEBUG total lines fetched:', lines.length);
-      console.log('PRODDB-DEBUG headerIdx chosen:', headerIdx);
-      console.log('PRODDB-DEBUG FULL header row text:', JSON.stringify(lines[headerIdx]));
-      console.log('PRODDB-DEBUG ALL hdrs after normalisation:', JSON.stringify(hdrs));
-      console.log('PRODDB-DEBUG first data line raw text:', JSON.stringify(lines[headerIdx+1]));
-    }
-    const result = lines.slice(headerIdx+1).map(line=>{
+    return lines.slice(headerIdx+1).map(line=>{
       const vals=parseRow(line);const obj={};
       hdrs.forEach((h,i)=>{obj[h]=vals[i]?vals[i].replace(/"/g,'').trim():'';});
       return obj;
     }).filter(r=>Object.values(r).filter(v=>v!=='').length>=1);
-    if(url.includes('prodDB') || url.slice(-25).includes('592000704') || url.includes('2PACX-1vS4xx')){
-      console.log('PRODDB-DEBUG result.length:', result.length);
-      console.log('PRODDB-DEBUG result[0]:', JSON.stringify(result[0]));
-      console.log('PRODDB-DEBUG result[1]:', JSON.stringify(result[1]));
-    }
-    return result;
   }catch(e){console.error('CSV error:',url.slice(-30),e);return[];}
 }
 
@@ -1023,9 +1002,6 @@ async function connectAll(){
   // [11]=labor_minus [12]=run_time_hr [13]=planned_cs [14]=planned_kg
   // [15]=planned_kg_cum [16]=actual_cs [17]=actual_kg
   if(prodRows.length > 0) {
-    console.log('prodRow[0] keys:', Object.keys(prodRows[0]).slice(0,8).join(', '));
-    console.log('prodRow[0] vals:', Object.values(prodRows[0]).slice(0,8).join(' | '));
-    
     const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
     
     prodData = prodRows.map(r => {
@@ -1062,19 +1038,6 @@ async function connectAll(){
     
     console.log('prodData rows:', prodData.length, 'from', prodRows.length, 'total, range:', from, 'to', to);
     if(prodData.length > 0) console.log('Sample:', JSON.stringify(prodData[0]));
-    // Extra debug: show raw dateVal for first 5 rows BEFORE date filtering, to diagnose date parsing
-    const rawDateDebug = prodRows.slice(0,5).map(r => {
-      const vals = Object.values(r);
-      let dv = '';
-      for(let i=0;i<vals.length;i++){
-        const v = String(vals[i]||'').trim();
-        if(!dv && (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v))) {
-          dv = v + ' -> ' + normaliseDate(v, 'MD');
-        }
-      }
-      return dv || '(no date found in row)';
-    });
-    console.log('prodDB raw date samples (first 5 rows):', JSON.stringify(rawDateDebug));
   } else {
     prodData = [];
   }
@@ -1588,15 +1551,13 @@ function renderLabour(c){
       <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
       <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div></div>
       <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days</div></div>
-      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>
-      <div class="stream-card" style="border-top-color:var(--teal)"><div class="klbl">Labour Cost / kg</div><div class="kval" style="font-size:18px;color:var(--teal)">${fmtKg(c.labPerKg)}</div><div class="ksub">Based on ${Math.round(c.totalKg).toLocaleString()} kg produced</div></div>`;
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>`;
   } else {
     // No live data — show placeholder
     $('labour-kpis').innerHTML=`
       <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
       <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
-      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
-      <div class="stream-card" style="border-top-color:var(--teal)"><div class="klbl">Labour Cost / kg</div><div class="kval" style="font-size:18px;color:var(--teal)">${fmtKg(c.labPerKg)}</div><div class="ksub">Based on ${Math.round(c.totalKg).toLocaleString()} kg produced</div></div>`;
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>`;
   }
 
   // Alloc chart
