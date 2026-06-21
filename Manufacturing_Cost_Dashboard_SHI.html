@@ -43,14 +43,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
 #countdown{font-weight:700;color:var(--blue);min-width:22px;display:inline-block;text-align:center;}
 
 /* LIVE STATUS BAR */
-.live-bar{padding:8px 24px;font-size:11px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);}
+.live-bar{padding:8px 24px;font-size:11px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);position:sticky;top:58px;z-index:99;background:#fff;}
 .live-bar.connected{background:var(--green-lt);color:var(--green);}
 .live-bar.disconnected{background:#fffbeb;color:var(--amber);}
 .live-bar.error{background:var(--red-lt);color:var(--red);}
 .live-icon{font-size:14px;}
 
 /* FILTERS */
-.filters{background:#fff;border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;}
+.filters{background:#fff;border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;position:sticky;z-index:98;box-shadow:0 2px 6px rgba(0,0,0,.05);}
 .fg{display:flex;flex-direction:column;gap:3px;}
 .flbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;}
 select,input[type=date]{background:#fff;border:1px solid var(--border2);color:var(--text);border-radius:var(--rs);padding:6px 10px;font-size:12px;outline:none;cursor:pointer;}
@@ -1789,6 +1789,7 @@ function init(){
   renderTable();
   renderAll();
   startCountdown();
+  updateStickyOffsets();
   if(window.location.protocol==='https:'||window.location.protocol==='http:'){
     setTimeout(connectAll,800);
   }else{
@@ -1796,6 +1797,23 @@ function init(){
     if(bar&&bt){bar.className='live-bar disconnected';bt.textContent='💡 Opened as local file — use Refresh button to load live data, or open from Google Drive for auto-connect.';}
   }
 }
+
+// Keeps the sticky header/status-bar/filters stack correctly positioned even if
+// their heights change (e.g. live-bar text wraps to 2 lines on narrow screens).
+function updateStickyOffsets(){
+  const hdr = document.querySelector('.hdr');
+  const liveBar = $('live-bar');
+  const filters = document.querySelector('.filters');
+  if(!hdr || !liveBar || !filters) return;
+  const hdrH = hdr.offsetHeight;
+  liveBar.style.top = hdrH + 'px';
+  const liveBarH = liveBar.offsetHeight;
+  filters.style.top = (hdrH + liveBarH) + 'px';
+}
+window.addEventListener('resize', updateStickyOffsets);
+// Re-check shortly after data loads, since live-bar text length changes post-connect
+setTimeout(updateStickyOffsets, 1500);
+
 init();
 </script>
 </body>
