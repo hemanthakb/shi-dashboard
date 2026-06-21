@@ -1,0 +1,1870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Holdings International – Manufacturing Cost Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#f4f6f9; --surface:#fff; --surface2:#f0f2f6; --card:#f8f9fb;
+  --border:#dde1e9; --border2:#c8cdd8;
+  --gold:#e8a000; --gold-dk:#b8860b; --gold-lt:#fdf6e3;
+  --blue:#1a5fa8; --blue-lt:#e8f0fb;
+  --green:#1a7a3c; --green-lt:#e8f7ed;
+  --red:#c0392b; --red-lt:#fdf0ee;
+  --amber:#a05e00; --amber-lt:#fef7e0;
+  --teal:#0d7a6b; --teal-lt:#e6f7f5;
+  --purple:#5b3fa0; --purple-lt:#f0ecfb;
+  --text:#1a1d26; --text2:#4a5068; --text3:#8b92a5;
+  --shadow:0 1px 4px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.04);
+  --r:10px; --rs:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.5;}
+
+/* HEADER */
+.hdr{background:#fff;border-bottom:2px solid var(--gold);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.brand{display:flex;align-items:center;gap:12px;}
+.bmark{width:36px;height:36px;background:linear-gradient(135deg,var(--gold),#c0620a);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#fff;}
+.bname{font-size:14px;font-weight:700;color:var(--text);}
+.bsub{font-size:11px;color:var(--text3);}
+.hdr-r{display:flex;align-items:center;gap:8px;}
+.btn{padding:6px 13px;border-radius:var(--rs);border:1px solid var(--border2);background:#fff;color:var(--text);font-size:12px;cursor:pointer;font-weight:500;transition:all .15s;}
+.btn:hover{background:var(--surface2);border-color:var(--blue);color:var(--blue);}
+.btn-gold{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:700;}
+.btn-gold:hover{background:#c87800;color:#fff;}
+.btn-blue{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:700;}
+.btn-blue:hover{background:#145090;color:#fff;}
+.rinfo{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px;}
+.rdot{width:7px;height:7px;border-radius:50%;background:var(--green);}
+.rdot.pulse{animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.25;}}
+#countdown{font-weight:700;color:var(--blue);min-width:22px;display:inline-block;text-align:center;}
+
+/* LIVE STATUS BAR */
+.live-bar{padding:8px 24px;font-size:11px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);position:sticky;top:58px;z-index:99;background:#fff;}
+.live-bar.connected{background:var(--green-lt);color:var(--green);}
+.live-bar.disconnected{background:#fffbeb;color:var(--amber);}
+.live-bar.error{background:var(--red-lt);color:var(--red);}
+.live-icon{font-size:14px;}
+
+/* FILTERS */
+.filters{background:#fff;border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;position:sticky;z-index:98;box-shadow:0 2px 6px rgba(0,0,0,.05);}
+.fg{display:flex;flex-direction:column;gap:3px;}
+.flbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;}
+select,input[type=date]{background:#fff;border:1px solid var(--border2);color:var(--text);border-radius:var(--rs);padding:6px 10px;font-size:12px;outline:none;cursor:pointer;}
+select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,95,168,.1);}
+.fsep{width:1px;height:30px;background:var(--border);align-self:center;}
+.dtag{font-size:10px;color:var(--text3);align-self:center;margin-left:auto;background:var(--surface2);padding:4px 10px;border-radius:20px;border:1px solid var(--border);}
+
+/* SHEETS SETUP */
+.setup-panel{background:#fff;border:1px solid #a0d8d2;border-radius:var(--r);padding:14px 18px;margin-bottom:16px;}
+.setup-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.setup-title{font-size:12px;font-weight:700;color:var(--teal);}
+.setup-sub{font-size:11px;color:var(--text2);}
+.setup-input{flex:1;min-width:260px;background:#f8f9fb;border:1px solid #a0d8d2;color:var(--text);border-radius:var(--rs);padding:7px 12px;font-size:12px;outline:none;}
+.setup-input:focus{border-color:var(--teal);}
+.setup-btn{padding:7px 16px;border-radius:var(--rs);background:var(--teal);border:none;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.setup-btn:hover{background:#0a6055;}
+
+/* MAIN */
+.main{padding:18px 24px;max-width:1500px;margin:0 auto;}
+
+/* ALERTS */
+.alert-zone{margin-bottom:16px;}
+.abar{border-radius:var(--rs);padding:10px 14px;display:flex;align-items:flex-start;gap:9px;margin-bottom:7px;border-left:4px solid;background:#fff;box-shadow:var(--shadow);}
+.abar.red{border-left-color:var(--red);background:var(--red-lt);}
+.abar.amber{border-left-color:var(--amber);background:var(--amber-lt);}
+.abar.green{border-left-color:var(--green);background:var(--green-lt);}
+.abar.blue{border-left-color:var(--blue);background:var(--blue-lt);}
+.aicon{font-size:15px;flex-shrink:0;margin-top:1px;}
+.atitle{font-weight:700;font-size:12px;}
+.abody{font-size:11px;color:var(--text2);margin-top:2px;}
+.abar.red .atitle{color:var(--red);}
+.abar.amber .atitle{color:var(--amber);}
+.abar.green .atitle{color:var(--green);}
+.abar.blue .atitle{color:var(--blue);}
+
+/* KPIs */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:13px;margin-bottom:18px;}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:15px 17px;box-shadow:var(--shadow);border-top:3px solid;}
+.kpi.gold{border-top-color:var(--gold);}
+.kpi.blue{border-top-color:var(--blue);}
+.kpi.green{border-top-color:var(--green);}
+.kpi.red{border-top-color:var(--red);}
+.kpi.teal{border-top-color:var(--teal);}
+.kpi.purple{border-top-color:var(--purple);}
+.kpi.amber{border-top-color:var(--amber);}
+.klbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:7px;}
+.kval{font-size:23px;font-weight:700;color:var(--text);letter-spacing:-.5px;line-height:1;}
+.ksub{font-size:11px;color:var(--text3);margin-top:5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;}
+.badge.up{background:#fde8e6;color:var(--red);}
+.badge.dn{background:var(--green-lt);color:var(--green);}
+.badge.neu{background:var(--blue-lt);color:var(--blue);}
+.badge.warn{background:var(--amber-lt);color:var(--amber);}
+
+/* CHARTS */
+.cgrid{display:grid;grid-template-columns:2fr 1fr;gap:15px;margin-bottom:18px;}
+.cc{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:16px;box-shadow:var(--shadow);}
+.ch{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
+.ct{font-size:12px;font-weight:700;color:var(--text);}
+.cs{font-size:10px;color:var(--text3);margin-top:2px;}
+.leg{display:flex;gap:12px;flex-wrap:wrap;margin-top:3px;}
+.li{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);}
+.ld{width:8px;height:8px;border-radius:50%;}
+canvas{max-height:230px;}
+
+/* OT */
+.otgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:18px;}
+.otc{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow);border-left:4px solid;}
+.otc.n{border-left-color:var(--green);}
+.otc.o{border-left-color:var(--amber);}
+.otc.d{border-left-color:var(--red);}
+.ott{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px;}
+.otc.n .ott{color:var(--green);}.otc.o .ott{color:var(--amber);}.otc.d .ott{color:var(--red);}
+.otv{font-size:21px;font-weight:700;letter-spacing:-.5px;}
+.otc.n .otv{color:var(--green);}.otc.o .otv{color:var(--amber);}.otc.d .otv{color:var(--red);}
+.otm{font-size:11px;color:var(--text3);margin-top:4px;}
+
+/* EFF GRID */
+.egrid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:18px;}
+
+/* TABLE */
+.tcard{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:18px;box-shadow:var(--shadow);}
+.thead{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2);}
+.tscroll{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--surface2);padding:9px 12px;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+th:first-child,th:nth-child(2){text-align:left;}
+td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--text);}
+td:first-child{text-align:left;font-weight:700;font-size:11px;color:var(--blue);}
+td:nth-child(2){text-align:left;color:var(--text2);font-size:11px;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#f8faff;}
+tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border2);}
+.pb{display:flex;align-items:center;gap:5px;justify-content:flex-end;}
+.pbt{width:60px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0;}
+.pbf{height:100%;border-radius:3px;}
+.pcp{font-size:10px;color:var(--text3);min-width:40px;text-align:right;}
+
+/* RECONCILE TABLE */
+.rec-table td:first-child{color:var(--text);font-weight:400;}
+.match-yes{color:var(--green);font-weight:700;}
+.match-no{color:var(--red);font-weight:700;}
+.match-warn{color:var(--amber);font-weight:700;}
+
+/* PRINT */
+@media print{
+  .filters,.hdr-r,.setup-panel,.live-bar,.no-print{display:none!important;}
+  .hdr{position:relative;border-bottom:2px solid #b8860b;}
+  body{background:#fff;}
+  .kgrid{grid-template-columns:repeat(6,1fr);}
+  .cgrid,.egrid{grid-template-columns:1fr 1fr;}
+  .otgrid{grid-template-columns:repeat(3,1fr);}
+  canvas{max-height:150px!important;}
+  .kpi,.cc,.tcard,.otc{box-shadow:none;border:1px solid #ccc;}
+  @page{margin:12mm;size:A4 landscape;}
+}
+@media(max-width:768px){
+  .cgrid,.egrid,.otgrid{grid-template-columns:1fr;}
+  .main{padding:10px 12px;}
+  .hdr{padding:0 14px;}
+  .filters{padding:8px 12px;}
+}
+
+
+/* ── SECTION DIVIDERS ─────────────────────────────────────────────────────── */
+.section-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:1px;margin:22px 0 12px;display:flex;align-items:center;gap:10px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+.section-tag{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;
+  font-size:10px;font-weight:700;margin-left:6px;}
+.tag-labour{background:var(--blue-lt);color:var(--blue);}
+.tag-maint{background:var(--red-lt);color:var(--red);}
+.tag-elec{background:var(--amber-lt);color:var(--amber);}
+.tag-capex{background:var(--gold-lt);color:var(--gold-dk);}
+.tag-total{background:var(--green-lt);color:var(--green);}
+
+/* ── COST STREAM CARDS ────────────────────────────────────────────────────── */
+.stream-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:13px;margin-bottom:18px;}
+.stream-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);
+  padding:15px 17px;box-shadow:var(--shadow);border-top:3px solid;}
+.stream-card.labour{border-top-color:var(--blue);}
+.stream-card.maint{border-top-color:var(--red);}
+.stream-card.elec{border-top-color:var(--amber);}
+.stream-card.total{border-top-color:var(--green);background:var(--green-lt);}
+.stream-card.perkg{border-top-color:var(--teal);}
+
+/* ── ELECTRICITY SECTION ──────────────────────────────────────────────────── */
+.elec-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;}
+.elec-meter{background:#fff;border:1px solid var(--border);border-radius:var(--r);
+  padding:13px 15px;box-shadow:var(--shadow);}
+.meter-area{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.6px;margin-bottom:6px;}
+.meter-kwh{font-size:20px;font-weight:700;color:var(--amber);}
+.meter-cost{font-size:11px;color:var(--text2);margin-top:3px;}
+.meter-eff{font-size:10px;color:var(--teal);margin-top:2px;font-weight:600;}
+
+/* ── BILL TRACKER ─────────────────────────────────────────────────────────── */
+.bill-row{display:flex;align-items:center;justify-content:space-between;
+  padding:8px 14px;border-bottom:1px solid var(--border);font-size:12px;}
+.bill-row:last-child{border-bottom:none;}
+.bill-month{font-weight:600;color:var(--text);min-width:80px;}
+.bill-kwh{color:var(--text2);min-width:80px;text-align:right;}
+.bill-rate{color:var(--teal);font-weight:600;min-width:80px;text-align:right;}
+.bill-amt{font-weight:700;color:var(--blue);min-width:100px;text-align:right;}
+.bill-current{background:var(--blue-lt);}
+
+/* ── MAINTENANCE BREAKDOWN ────────────────────────────────────────────────── */
+.maint-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px;}
+.maint-type-card{background:#fff;border:1px solid var(--border);border-radius:var(--r);
+  padding:12px 14px;box-shadow:var(--shadow);}
+.maint-type-label{font-size:10px;font-weight:700;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;}
+.maint-type-val{font-size:18px;font-weight:700;color:var(--red);}
+.maint-type-sub{font-size:10px;color:var(--text3);margin-top:3px;}
+
+/* ── CAPEX PANEL ──────────────────────────────────────────────────────────── */
+.capex-panel{background:var(--gold-lt);border:1px solid #e8d5a0;border-radius:var(--r);
+  padding:16px 18px;margin-bottom:18px;}
+.capex-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.capex-title{font-size:12px;font-weight:700;color:var(--gold-dk);}
+.capex-note{font-size:10px;color:var(--amber);background:#fff;border:1px solid #e8d5a0;
+  padding:3px 10px;border-radius:20px;}
+.capex-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+.capex-stat{background:#fff;border:1px solid #e8d5a0;border-radius:var(--rs);padding:10px 12px;}
+.capex-stat-label{font-size:9px;font-weight:700;color:var(--gold-dk);text-transform:uppercase;
+  letter-spacing:.6px;margin-bottom:4px;}
+.capex-stat-val{font-size:16px;font-weight:700;color:var(--gold-dk);}
+.capex-stat-sub{font-size:10px;color:var(--text3);margin-top:2px;}
+
+/* ── UNIT COST SUMMARY ────────────────────────────────────────────────────── */
+.unit-cost-card{background:linear-gradient(135deg,var(--green-lt),#d0f0dc);
+  border:1px solid #86efac;border-radius:var(--r);padding:18px 20px;margin-bottom:18px;}
+.unit-cost-title{font-size:12px;font-weight:700;color:var(--green);margin-bottom:14px;}
+.unit-cost-breakdown{display:flex;gap:0;flex-wrap:wrap;}
+.ucb-item{flex:1;min-width:140px;padding:10px 14px;border-right:1px solid #86efac;}
+.ucb-item:last-child{border-right:none;}
+.ucb-label{font-size:10px;color:var(--text2);font-weight:600;margin-bottom:4px;}
+.ucb-val{font-size:18px;font-weight:700;}
+.ucb-pct{font-size:10px;color:var(--text3);margin-top:2px;}
+.ucb-labour{color:var(--blue);}
+.ucb-maint{color:var(--red);}
+.ucb-elec{color:var(--amber);}
+.ucb-total{color:var(--green);font-size:24px!important;}
+
+@media print{
+  .section-title,.stream-grid,.elec-grid,.maint-type-grid,.capex-panel,.unit-cost-card{page-break-inside:avoid;}
+  .elec-grid{grid-template-columns:repeat(3,1fr);}
+  .maint-type-grid{grid-template-columns:repeat(3,1fr);}
+}
+@media(max-width:768px){
+  .elec-grid,.maint-type-grid{grid-template-columns:1fr 1fr;}
+  .unit-cost-breakdown{flex-direction:column;}
+}
+
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="brand">
+    <img src="data:image/jpeg;base64,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" alt="SHI" style="height:46px;width:46px;object-fit:contain;border-radius:7px;flex-shrink:0;display:block;">
+    <div>
+      <div class="bname">Star Holdings International</div>
+      <div class="bsub">Manufacturing Cost Dashboard · Labour · Maintenance · Electricity</div>
+    </div>
+  </div>
+  <div class="hdr-r">
+    <div class="rinfo no-print" id="conn-status" style="cursor:pointer" onclick="manualRefresh()" title="Click to refresh">
+      <div class="rdot" id="rdot"></div>
+      <span id="conn-label" style="color:var(--text3)">Connecting…</span>
+      <span id="countdown" style="color:var(--blue);font-weight:700;min-width:22px;display:inline-block"></span>s
+    </div>
+    <button class="btn btn-gold no-print" id="connect-btn" onclick="manualRefresh()" title="Refresh all data now">↻ Refresh</button>
+    <button class="btn btn-blue no-print" onclick="window.print()">🖨 Print</button>
+  </div>
+</div>
+
+<!-- LIVE STATUS BAR -->
+<div class="live-bar disconnected" id="live-bar" style="padding:6px 24px;font-size:11px;">
+  <span class="live-icon" style="font-size:13px;">📡</span>
+  <span id="live-bar-text">Connecting to data sources…</span>
+  <span style="margin-left:auto;color:var(--text3);font-size:10px;" id="live-bar-time"></span>
+</div>
+
+<!-- FILTERS -->
+<div class="filters no-print">
+  <div class="fg"><span class="flbl">Date From</span><input type="date" id="f-from" value="2026-06-02"></div>
+  <div class="fg"><span class="flbl">Date To</span><input type="date" id="f-to" value="2026-06-02"></div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <span class="flbl">Production Line</span>
+    <select id="f-line"><option value="all">All Lines</option></select>
+  </div>
+  <div class="fg">
+    <span class="flbl">Cost Stream</span>
+    <select id="f-stream">
+      <option value="all">All Costs</option>
+      <option value="labour">Labour Only</option>
+      <option value="maintenance">Maintenance Only</option>
+      <option value="electricity">Electricity Only</option>
+    </select>
+  </div>
+  <button class="btn btn-blue" onclick="applyFilters()" style="align-self:flex-end">Apply</button>
+  <button class="btn" onclick="setToday()" style="align-self:flex-end">Today</button>
+  <button class="btn" onclick="setThisWeek()" style="align-self:flex-end">This Week</button>
+  <button class="btn" onclick="setThisMonth()" style="align-self:flex-end">This Month</button>
+  <span class="dtag" id="dtag">Select date range and connect</span>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- ALERTS -->
+  <div id="alert-zone"></div>
+
+  <!-- TIMESTAMP -->
+  <div style="font-size:10px;color:var(--text3);margin-bottom:14px;" id="ts"></div>
+
+  <!-- ── TOTAL COST SUMMARY ───────────────────────────────────────────────── -->
+  <div class="unit-cost-card" id="unit-cost-card">
+    <div class="unit-cost-title">📊 Total Manufacturing Cost per kg — Selected Period</div>
+    <div class="unit-cost-breakdown" id="unit-cost-breakdown">
+      <div class="ucb-item"><div class="ucb-label">Labour Cost / kg</div><div class="ucb-val ucb-labour" id="uc-labour">–</div><div class="ucb-pct" id="uc-labour-pct">Connect to calculate</div></div>
+      <div class="ucb-item"><div class="ucb-label">Maintenance Cost / kg</div><div class="ucb-val ucb-maint" id="uc-maint">–</div><div class="ucb-pct" id="uc-maint-pct">Connect to calculate</div></div>
+      <div class="ucb-item"><div class="ucb-label">Electricity Cost / kg</div><div class="ucb-val ucb-elec" id="uc-elec">–</div><div class="ucb-pct" id="uc-elec-pct">Connect to calculate</div></div>
+      <div class="ucb-item"><div class="ucb-label">TOTAL COST / kg</div><div class="ucb-val ucb-total" id="uc-total">–</div><div class="ucb-pct" id="uc-total-sub">Labour + Maintenance + Electricity</div></div>
+    </div>
+  </div>
+
+  <!-- ── KPI CARDS ────────────────────────────────────────────────────────── -->
+  <div class="section-title">Key Performance Indicators <span class="section-tag tag-total">Period Totals</span></div>
+  <div class="kgrid" id="kgrid"></div>
+
+  <!-- ── COST TREND ───────────────────────────────────────────────────────── -->
+  <div class="section-title">Cost Trend <span class="section-tag tag-total">Stacked Daily</span></div>
+  <div class="cgrid">
+    <div class="cc">
+      <div class="ch">
+        <div><div class="ct">Daily Cost — Labour vs Maintenance vs Electricity</div><div class="cs">Stacked actual costs per day for selected period</div></div>
+        <div class="leg">
+          <div class="li"><div class="ld" style="background:#1a5fa8"></div>Labour</div>
+          <div class="li"><div class="ld" style="background:#c0392b"></div>Maintenance</div>
+          <div class="li"><div class="ld" style="background:#e8a000"></div>Electricity</div>
+        </div>
+      </div>
+      <canvas id="trendChart"></canvas>
+    </div>
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Cost Mix</div><div class="cs">% share of total cost — period</div></div></div>
+      <canvas id="mixChart"></canvas>
+      <div id="mixChartEmpty" style="display:none;padding:40px;text-align:center;color:var(--text3);font-size:12px;">Connect data sources to see cost mix</div>
+    </div>
+  </div>
+
+  <!-- ── LABOUR SECTION ───────────────────────────────────────────────────── -->
+  <div class="section-title">Labour <span class="section-tag tag-labour">ERP Allocation</span></div>
+  <div class="stream-grid" id="labour-kpis"></div>
+  <div class="egrid">
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Labour Allocation by Line</div><div class="cs" id="alloc-sub">ERP sample data</div></div><span id="alloc-live-badge" style="display:none;font-size:10px;background:var(--green-lt);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:700;">● LIVE</span></div>
+      <canvas id="allocChart" style="max-height:180px;"></canvas>
+    </div>
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Labour Hours Variance vs Plan</div><div class="cs">+% over-hours = cost risk</div></div></div>
+      <canvas id="hrsChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Live alloc table -->
+  <div class="tcard" id="live-alloc-section" style="display:none;margin-bottom:18px;">
+    <div class="thead"><div><div class="ct" style="color:var(--blue)">⚡ Live Labour Allocation by Line</div><div class="cs" id="alloc-table-sub"></div></div></div>
+    <div class="tscroll"><table>
+      <thead><tr><th style="text-align:left">Line</th><th>Hours</th><th>% Share</th><th>Est. Labour Cost</th></tr></thead>
+      <tbody id="live-alloc-tbody"></tbody>
+      <tfoot id="live-alloc-total"></tfoot>
+    </table></div>
+  </div>
+
+  <!-- ── MAINTENANCE SECTION ──────────────────────────────────────────────── -->
+  <div class="section-title">Engineering & Maintenance <span class="section-tag tag-maint">Engineering Drive</span></div>
+  <div class="maint-type-grid" id="maint-type-cards"></div>
+  <div class="egrid">
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Maintenance Cost by Line / Area</div><div class="cs">Actual spend for selected period</div></div></div>
+      <canvas id="maintLineChart" style="max-height:200px;"></canvas>
+    </div>
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Cost Type Breakdown</div><div class="cs">Factory vs Machinery · Preventive vs Breakdown</div></div></div>
+      <canvas id="maintTypeChart" style="max-height:200px;"></canvas>
+    </div>
+  </div>
+  <div class="tcard" id="maint-table-card" style="margin-bottom:18px;display:none;">
+    <div class="thead"><div><div class="ct">Maintenance Cost Detail</div><div class="cs" id="maint-table-sub"></div></div></div>
+    <div class="tscroll"><table>
+      <thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Line / Area</th><th style="text-align:left">Cost Type</th><th style="text-align:left">Sub-Type</th><th>Amount (LKR)</th><th style="text-align:left">Supplier</th><th style="text-align:left">Description</th></tr></thead>
+      <tbody id="maint-tbody"></tbody>
+      <tfoot id="maint-tfoot"></tfoot>
+    </table></div>
+  </div>
+
+  <!-- ── ELECTRICITY SECTION ──────────────────────────────────────────────── -->
+  <div class="section-title">Electricity <span class="section-tag tag-elec">Daily KWh + Monthly Bill</span></div>
+  <div class="elec-grid" id="elec-meters"></div>
+  <div class="egrid">
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Daily KWh by Area</div><div class="cs">Consumption trend for selected period</div></div></div>
+      <canvas id="elecTrendChart" style="max-height:200px;"></canvas>
+    </div>
+    <div class="cc">
+      <div class="ch"><div><div class="ct">Monthly Bill Tracker</div><div class="cs">LKR per month · rate per KWh · YTD</div></div></div>
+      <div id="bill-tracker" style="max-height:220px;overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <!-- ── CAPEX INFO PANEL ─────────────────────────────────────────────────── -->
+  <div class="section-title">Capital Expenditure <span class="section-tag tag-capex">Info Only — Not in Cost Totals</span></div>
+  <div class="capex-panel" id="capex-panel">
+    <div class="capex-header">
+      <div class="capex-title">📋 Capex Register — Asset Summary</div>
+      <div class="capex-note">ℹ Info panel only — Capex depreciation not included in unit cost calculations</div>
+    </div>
+    <div class="capex-grid" id="capex-grid"></div>
+    <div id="capex-table-wrap" style="margin-top:12px;display:none;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <thead><tr style="background:#e8d5a0;">
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Asset</th>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Line/Area</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Cost (LKR)</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Monthly Depr.</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Net Book Value</th>
+          <th style="text-align:center;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Status</th>
+        </tr></thead>
+        <tbody id="capex-tbody"></tbody>
+      </table>
+    </div>
+    <button onclick="toggleCapexTable()" id="capex-toggle-btn" style="margin-top:10px;padding:5px 14px;border-radius:6px;border:1px solid #e8d5a0;background:#fff;color:var(--gold-dk);font-size:11px;cursor:pointer;font-weight:600;">Show Asset Detail ▼</button>
+  </div>
+
+  <!-- ── HOURLY RATES SECTION ────────────────────────────────────────────── -->
+  <div class="section-title">Hourly Labour Cost by Product <span class="section-tag tag-labour">Actual from ERP Allocation + Production DB</span></div>
+
+  <!-- Summary filter -->
+  <div class="cc" style="margin-bottom:14px;padding:12px 16px;">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);">Filter by Line:</div>
+      <select id="hr-line-filter" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;" onchange="renderHourlyRates()">
+        <option value="all">All Lines</option>
+      </select>
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+        <select id="hr-view-mode" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;" onchange="renderHourlyRates()">
+          <option value="perCS">View: Cost per CS</option>
+          <option value="perHr">View: Cost per Hour</option>
+          <option value="perKg">View: Cost per kg</option>
+        </select>
+        <div style="font-size:10px;color:var(--text3);">Allocated Hours × LKR 256.20</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Line chart -->
+  <div class="cc" style="margin-bottom:18px;">
+    <div class="ch">
+      <div>
+        <div class="ct">Labour Cost per Case (CS) by Product</div>
+        <div class="cs" id="hr-chart-sub">Select date range and connect to see product costs</div>
+      </div>
+      <div class="leg">
+        <div class="li"><div class="ld" style="background:#1a5fa8"></div>Actual Cost/CS</div>
+        <div class="li"><div class="ld" style="background:#e8a000;border:2px dashed #e8a000;background:transparent"></div>Standard Cost/CS</div>
+      </div>
+    </div>
+    <canvas id="hrChart" style="max-height:280px;"></canvas>
+  </div>
+
+  <!-- Product detail table -->
+  <div class="tcard" id="hr-table-card" style="margin-bottom:18px;display:none;">
+    <div class="thead">
+      <div>
+        <div class="ct">Product Labour Cost Detail</div>
+        <div class="cs" id="hr-table-sub"></div>
+      </div>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr>
+          <th style="text-align:left">Product</th>
+          <th style="text-align:left">Line</th>
+          <th>Alloc Hrs</th>
+          <th>Run Time</th>
+          <th>Std HC</th>
+          <th>Labour Cost</th>
+          <th style="background:var(--teal-lt);color:var(--teal)">LKR/Hour</th>
+          <th>Actual CS</th>
+          <th>Actual kg</th>
+          <th style="background:var(--blue-lt);color:var(--blue)">LKR/CS Actual</th>
+          <th style="background:var(--amber-lt);color:var(--amber)">LKR/CS Standard</th>
+          <th>Variance/CS</th>
+          <th>LKR/kg</th>
+        </tr></thead>
+        <tbody id="hr-tbody"></tbody>
+        <tfoot id="hr-tfoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── PRODUCTION DB SECTION ────────────────────────────────────────────── -->
+  <div class="section-title">Production Database <span class="section-tag tag-labour">Jan–Mar 2026 Historical</span></div>
+  <div class="tcard" style="margin-bottom:18px;">
+    <div class="thead"><div><div class="ct">Line-by-Line Cost Breakdown — Production DB</div><div class="cs">Planned vs actual labour hours and output · Jan–Mar 2026</div></div></div>
+    <div class="tscroll"><table>
+      <thead><tr>
+        <th>Code</th><th>Production Line</th><th>Days</th>
+        <th>Plan Hrs</th><th>Act Hrs</th><th>Plan CS</th><th>Act CS</th><th>Eff%</th>
+        <th>Planned Cost</th><th>Actual Cost</th><th>Variance</th><th>Hrs Var%</th><th>Status</th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+      <tfoot id="tfoot"></tfoot>
+    </table></div>
+  </div>
+
+</div><!-- /main -->
+<script>
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const LM={'PRL':'Pan Room Line','BSL':'Budget Soap Line','DFL':'Dishwash Finishing Line','DPML':'Detergent Powder Mixing Line','DPPL':'Detergent Powder Packing Line','FSL':'Finishing Soap Line','ISL':'Incense Sticks Line','LBML':'Liquid Batch Mixing Line','LPSL':'Liquid Packing Sachet Line','TBCPL':'Toilet Bowl Cleaner Packing Line','AFPL':'Air Freshener Packing Line','GCPL':'Glass Cleaner Packing Line','BPL':'Bleaching Powder Line','CPL':'Cleaning Powder Line','BLPL':'Bleaching Liquid Packing Line','SBLPL':'Star Blue Liquid Packing Line','HWLPL':'Hand Wash Liquid Packing Line','DLPL':'Dishwash Liquid Packing Line','LLPL':'Laundry Liquid Packing Line','DPL':'Disinfectants Packing Line','FSBPL':'Fabric Softener Bottle Packing Line','PCL':'Price Coding Line','CRWL':'Chemical Room Weighing Line','FGL':'Factory General Line','PARL':'Promotion and Reworks Line','BPKL':'Blister Packing Line'};
+const LC=['#1a5fa8','#0d7a6b','#b8860b','#c0392b','#5b3fa0','#1a7a3c','#e8a000','#a05e00','#2980b9','#16a085','#8e44ad','#27ae60','#d35400','#7f8c8d','#1abc9c','#e74c3c','#2c3e50'];
+const SD={"avg_blended":256.20,"employee_count":45,"prod_record_count":596,"ot_summary":{"weekday":1926,"saturday":820,"sunday_dot":190},"daily_totals":[{"date":"2026-01-05","pc":10861,"ac":6775,"pcs_p":176.9,"pcs_a":34.0,"kg_a":510},{"date":"2026-01-06","pc":7198,"ac":8431,"pcs_p":230.8,"pcs_a":70.0,"kg_a":1050},{"date":"2026-01-07","pc":24165,"ac":16411,"pcs_p":429.2,"pcs_a":108.2,"kg_a":1623},{"date":"2026-01-08","pc":25704,"ac":21681,"pcs_p":374.5,"pcs_a":130.1,"kg_a":1952},{"date":"2026-01-09","pc":14749,"ac":19874,"pcs_p":179.6,"pcs_a":138.7,"kg_a":2081},{"date":"2026-01-10","pc":22939,"ac":16664,"pcs_p":322.2,"pcs_a":112.5,"kg_a":1688},{"date":"2026-01-12","pc":43571,"ac":53060,"pcs_p":543.6,"pcs_a":230.8,"kg_a":3462},{"date":"2026-01-13","pc":7829,"ac":13061,"pcs_p":116.0,"pcs_a":267.6,"kg_a":4014},{"date":"2026-01-14","pc":27581,"ac":28886,"pcs_p":560.1,"pcs_a":252.2,"kg_a":3783},{"date":"2026-01-16","pc":22679,"ac":27059,"pcs_p":362.8,"pcs_a":321.7,"kg_a":4826},{"date":"2026-01-17","pc":15435,"ac":7102,"pcs_p":302.2,"pcs_a":54.0,"kg_a":810},{"date":"2026-01-19","pc":11187,"ac":4052,"pcs_p":272.5,"pcs_a":51.0,"kg_a":765},{"date":"2026-01-20","pc":10619,"ac":8659,"pcs_p":235.0,"pcs_a":88.3,"kg_a":1325},{"date":"2026-01-21","pc":9190,"ac":7316,"pcs_p":248.4,"pcs_a":61.0,"kg_a":915},{"date":"2026-01-22","pc":15967,"ac":11745,"pcs_p":369.5,"pcs_a":100.8,"kg_a":1512},{"date":"2026-01-23","pc":23079,"ac":16401,"pcs_p":486.2,"pcs_a":149.7,"kg_a":2246},{"date":"2026-01-24","pc":33000,"ac":43349,"pcs_p":562.0,"pcs_a":289.6,"kg_a":4344},{"date":"2026-01-26","pc":16169,"ac":25217,"pcs_p":312.8,"pcs_a":161.6,"kg_a":2424},{"date":"2026-01-27","pc":23639,"ac":29701,"pcs_p":467.6,"pcs_a":204.6,"kg_a":3069},{"date":"2026-01-28","pc":18584,"ac":21932,"pcs_p":331.7,"pcs_a":121.8,"kg_a":1827},{"date":"2026-01-29","pc":565,"ac":188,"pcs_p":18.8,"pcs_a":5.0,"kg_a":75},{"date":"2026-01-30","pc":10655,"ac":6525,"pcs_p":247.5,"pcs_a":51.0,"kg_a":765},{"date":"2026-01-31","pc":24254,"ac":15121,"pcs_p":397.7,"pcs_a":338.8,"kg_a":5082},{"date":"2026-02-03","pc":1710,"ac":1719,"pcs_p":31.9,"pcs_a":12.0,"kg_a":180},{"date":"2026-02-05","pc":12951,"ac":21324,"pcs_p":201.6,"pcs_a":128.1,"kg_a":1922},{"date":"2026-02-06","pc":18764,"ac":24044,"pcs_p":355.4,"pcs_a":135.0,"kg_a":2025},{"date":"2026-02-07","pc":34350,"ac":46237,"pcs_p":710.6,"pcs_a":632.8,"kg_a":9492},{"date":"2026-02-09","pc":21366,"ac":40501,"pcs_p":411.7,"pcs_a":252.3,"kg_a":3785},{"date":"2026-02-10","pc":31208,"ac":32123,"pcs_p":616.3,"pcs_a":279.8,"kg_a":4197},{"date":"2026-02-11","pc":13419,"ac":14719,"pcs_p":286.0,"pcs_a":53.9,"kg_a":809},{"date":"2026-02-12","pc":9354,"ac":9908,"pcs_p":315.6,"pcs_a":66.8,"kg_a":1002},{"date":"2026-02-13","pc":18669,"ac":21342,"pcs_p":500.8,"pcs_a":145.2,"kg_a":2178},{"date":"2026-02-14","pc":4056,"ac":6096,"pcs_p":119.7,"pcs_a":30.0,"kg_a":450},{"date":"2026-02-16","pc":6179,"ac":7304,"pcs_p":114.4,"pcs_a":49.0,"kg_a":735},{"date":"2026-02-17","pc":20681,"ac":22033,"pcs_p":330.5,"pcs_a":231.8,"kg_a":3477},{"date":"2026-02-18","pc":41229,"ac":28602,"pcs_p":686.1,"pcs_a":187.9,"kg_a":2819},{"date":"2026-02-19","pc":24913,"ac":24213,"pcs_p":418.0,"pcs_a":310.4,"kg_a":4656},{"date":"2026-02-20","pc":20975,"ac":14595,"pcs_p":384.9,"pcs_a":101.3,"kg_a":1520},{"date":"2026-02-21","pc":24172,"ac":27077,"pcs_p":557.4,"pcs_a":278.6,"kg_a":4179},{"date":"2026-02-23","pc":10934,"ac":8237,"pcs_p":215.7,"pcs_a":21.5,"kg_a":323},{"date":"2026-02-24","pc":13346,"ac":15235,"pcs_p":276.9,"pcs_a":112.0,"kg_a":1680},{"date":"2026-02-25","pc":25110,"ac":21230,"pcs_p":420.5,"pcs_a":167.8,"kg_a":2517},{"date":"2026-02-27","pc":16542,"ac":23948,"pcs_p":366.6,"pcs_a":249.1,"kg_a":3737},{"date":"2026-02-28","pc":25278,"ac":34130,"pcs_p":534.1,"pcs_a":206.5,"kg_a":3098},{"date":"2026-03-04","pc":17608,"ac":20279,"pcs_p":309.1,"pcs_a":244.8,"kg_a":3672},{"date":"2026-03-05","pc":15189,"ac":15080,"pcs_p":351.0,"pcs_a":202.0,"kg_a":3030},{"date":"2026-03-06","pc":5326,"ac":8573,"pcs_p":117.2,"pcs_a":75.0,"kg_a":1125},{"date":"2026-03-07","pc":45093,"ac":37312,"pcs_p":859.1,"pcs_a":811.6,"kg_a":12174},{"date":"2026-03-09","pc":27940,"ac":28682,"pcs_p":575.6,"pcs_a":344.0,"kg_a":5160},{"date":"2026-03-10","pc":24530,"ac":22051,"pcs_p":559.0,"pcs_a":159.2,"kg_a":2388},{"date":"2026-03-11","pc":51311,"ac":39484,"pcs_p":1276.1,"pcs_a":520.1,"kg_a":7802},{"date":"2026-03-12","pc":49168,"ac":51115,"pcs_p":1036.1,"pcs_a":646.0,"kg_a":9690},{"date":"2026-03-13","pc":50400,"ac":49977,"pcs_p":978.5,"pcs_a":603.7,"kg_a":9056},{"date":"2026-03-14","pc":67507,"ac":61052,"pcs_p":1421.4,"pcs_a":810.0,"kg_a":12150},{"date":"2026-03-16","pc":35493,"ac":42533,"pcs_p":623.6,"pcs_a":382.4,"kg_a":5736},{"date":"2026-03-17","pc":52779,"ac":53524,"pcs_p":1009.6,"pcs_a":634.2,"kg_a":9513},{"date":"2026-03-18","pc":64623,"ac":60962,"pcs_p":1436.9,"pcs_a":712.2,"kg_a":10683},{"date":"2026-03-19","pc":54390,"ac":50513,"pcs_p":1157.5,"pcs_a":562.7,"kg_a":8441},{"date":"2026-03-20","pc":39861,"ac":42119,"pcs_p":693.8,"pcs_a":366.0,"kg_a":5490},{"date":"2026-03-21","pc":63988,"ac":62669,"pcs_p":1515.9,"pcs_a":914.4,"kg_a":13716},{"date":"2026-03-23","pc":48312,"ac":49769,"pcs_p":946.2,"pcs_a":589.8,"kg_a":8847},{"date":"2026-03-24","pc":24780,"ac":28382,"pcs_p":724.3,"pcs_a":432.0,"kg_a":6480},{"date":"2026-03-25","pc":40062,"ac":47426,"pcs_p":964.3,"pcs_a":630.0,"kg_a":9450},{"date":"2026-03-26","pc":40526,"ac":37565,"pcs_p":871.8,"pcs_a":581.1,"kg_a":8717},{"date":"2026-03-27","pc":26248,"ac":20326,"pcs_p":453.6,"pcs_a":239.0,"kg_a":3585},{"date":"2026-03-28","pc":49848,"ac":49712,"pcs_p":1369.2,"pcs_a":768.3,"kg_a":11525}],"line_totals":{"BLPL":{"planned_cost":70367,"actual_cost":85420,"planned_cs":1828,"actual_cs":736,"planned_hrs":467,"actual_hrs":567,"active_days":22},"BPL":{"planned_cost":0,"actual_cost":3764,"planned_cs":0,"actual_cs":19,"planned_hrs":0,"actual_hrs":25,"active_days":1},"BSL":{"planned_cost":58738,"actual_cost":110990,"planned_cs":1815,"actual_cs":1135,"planned_hrs":390,"actual_hrs":737,"active_days":22},"DFL":{"planned_cost":118842,"actual_cost":122907,"planned_cs":2174,"actual_cs":1114,"planned_hrs":789,"actual_hrs":816,"active_days":12},"DLPL":{"planned_cost":12334,"actual_cost":11843,"planned_cs":308,"actual_cs":96,"planned_hrs":82,"actual_hrs":79,"active_days":5},"DPL":{"planned_cost":2764,"actual_cost":1807,"planned_cs":60,"actual_cs":8,"planned_hrs":18,"actual_hrs":12,"active_days":2},"DPPL":{"planned_cost":63967,"actual_cost":77054,"planned_cs":3070,"actual_cs":1747,"planned_hrs":425,"actual_hrs":512,"active_days":13},"FSBPL":{"planned_cost":88918,"actual_cost":89195,"planned_cs":2450,"actual_cs":1086,"planned_hrs":591,"actual_hrs":592,"active_days":21},"FSL":{"planned_cost":40115,"actual_cost":37839,"planned_cs":497,"actual_cs":246,"planned_hrs":266,"actual_hrs":251,"active_days":13},"GCPL":{"planned_cost":1019,"actual_cost":2484,"planned_cs":34,"actual_cs":20,"planned_hrs":7,"actual_hrs":16,"active_days":3},"HWLPL":{"planned_cost":4089,"actual_cost":5170,"planned_cs":129,"actual_cs":50,"planned_hrs":27,"actual_hrs":34,"active_days":2},"ISL":{"planned_cost":668512,"actual_cost":791078,"planned_cs":9911,"actual_cs":7616,"planned_hrs":4440,"actual_hrs":5254,"active_days":48},"LLPL":{"planned_cost":19653,"actual_cost":16084,"planned_cs":435,"actual_cs":765,"planned_hrs":131,"actual_hrs":107,"active_days":11},"LPSL":{"planned_cost":80060,"actual_cost":87950,"planned_cs":1914,"actual_cs":1495,"planned_hrs":532,"actual_hrs":584,"active_days":11},"PARL":{"planned_cost":457805,"actual_cost":265812,"planned_cs":9527,"actual_cs":1804,"planned_hrs":3041,"actual_hrs":1765,"active_days":57},"SBLPL":{"planned_cost":14201,"actual_cost":14966,"planned_cs":280,"actual_cs":78,"planned_hrs":94,"actual_hrs":99,"active_days":5},"TBCPL":{"planned_cost":8422,"actual_cost":8571,"planned_cs":220,"actual_cs":207,"planned_hrs":56,"actual_hrs":57,"active_days":5}},"alloc_by_line":{"Detergent Powder Mixing Line":65.0,"Finishing Soap Line":35.83,"Liquid Batch":71.93,"Promotions and Reworks Line":56.64,"Incense Sticks Line":61.0,"Liquid Packaging":35.83,"Dishwash Finishing Line":87.0,"Detergent Powder Packing Line":18.91,"Budget Soap Line":25.5,"Laundry Liquid Packing Line":18.0}};
+
+// ── DATA SOURCE URLs (hardcoded — update here if URLs change) ────────────────
+const URLS = {
+  labour:    'https://script.google.com/macros/s/AKfycbzZ0MCT_yPBDbPq-1cx9_wXwVFA1IgI_r9VmeAW6ZCvv8SqoF9zk5JWi2inMiWvqMD1/exec',
+  labourCSV: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQGh56VfbKedkJ9-NdIXrtcUNmEFNf9WIzfSzZdo5PlkANovwvsXSQyqwn5q_8KHQ/pub?gid=1577816686&single=true&output=csv',
+  eng:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=2105150919&single=true&output=csv',
+  elecDaily: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=1049854383&single=true&output=csv',
+  elecBill:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=726252262&single=true&output=csv',
+  capex:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=734700933&single=true&output=csv',
+  prodDB:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=592000704&single=true&output=csv',
+  prodSrc:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=636362217&single=true&output=csv',
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+// ── PARSE LABOUR ALLOCATION CSV ───────────────────────────────────────────────
+function parseLabourCSV(rows, from, to) {
+  // CSV structure: Date | Employee | Line | Product | Hours
+  //
+  // Supports BOTH row styles, auto-detected per block:
+  //  (A) OLD STYLE: Employee name appears only on the "Total" row that closes a
+  //      block; detail rows above it have a blank Employee cell.
+  //  (B) NEW STYLE: Employee name is filled on every row of the block (agreed
+  //      going-forward standard — simpler and unambiguous).
+  // In both styles, the Line column may be blank on some rows within a block when
+  // the same employee works multiple products on the same line consecutively, or
+  // when the ERP export trails the line label onto the last row of a group.
+  // We always backward-fill blank Line values within a block (verified to match
+  // sheet totals exactly in both styles).
+  //
+  // Detection: gather all rows between two "Total" markers into one block. If ANY
+  // detail row in that block has a non-blank Employee value, treat the WHOLE block
+  // as new-style (use that employee name). Otherwise treat it as old-style (the
+  // employee name comes from the block's own Total row, read after the fact).
+  const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
+
+  const lineTotals       = {};
+  const productTotals    = {};
+  const dailyTotals      = {};
+  const employeeSet      = new Set();
+  const daysSet          = new Set();
+  const employeeDayTotals= {}; // key = `${date}|${employee}` -> total hours that day, for OT calc
+  let   totalHours       = 0;
+  let   totalCost        = 0;
+
+  const blocks = []; // { date, employee, rows: [{line, prod, hrs}] }
+  let curRows = [];
+  let curDate = '';
+  let curDetailEmp = ''; // non-blank employee seen among detail rows (new-style signal)
+
+  rows.forEach(r => {
+    const vals    = Object.values(r);
+    const dateRaw = String(vals[0]||'').trim();
+    const empCol  = String(vals[1]||'').trim();
+    const lineCol = String(vals[2]||'').trim();
+    const prodCol = String(vals[3]||'').trim();
+    const hrsCol  = sf(vals[4]);
+
+    if(dateRaw.toLowerCase().includes('date') || dateRaw.includes('─') || dateRaw.includes('Paste')) return;
+    if(prodCol.includes('─')) return;
+
+    if(dateRaw) {
+      const nd = normaliseDate(dateRaw);
+      if(nd && /^20[0-9]{2}/.test(nd)) curDate = nd;
+    }
+
+    // Grand daily total row: employee='Total', line blank, product blank — skip entirely
+    if(empCol === 'Total' && !lineCol && !prodCol) return;
+
+    // Total row closes the current block. Employee name here is authoritative for
+    // OLD-style blocks; for NEW-style blocks we already captured it from detail rows.
+    if(lineCol === 'Total' && empCol) {
+      const finalEmp = curDetailEmp || empCol;
+      blocks.push({ date: curDate, employee: finalEmp, rows: curRows });
+      curRows = [];
+      curDetailEmp = '';
+      return;
+    }
+
+    if(!lineCol && !prodCol) return; // stray row
+    if(hrsCol <= 0) return;
+
+    if(empCol) curDetailEmp = empCol; // new-style signal
+    curRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
+  });
+
+  console.log('LABOUR-DEBUG total blocks found:', blocks.length);
+  console.log('LABOUR-DEBUG all block dates (raw, before filter):', JSON.stringify(blocks.map(b=>b.date)));
+  console.log('LABOUR-DEBUG filter range from=', from, 'to=', to);
+  const uniqueBlockDates = [...new Set(blocks.map(b=>b.date))].sort();
+  console.log('LABOUR-DEBUG unique block dates:', JSON.stringify(uniqueBlockDates));
+
+  // Aggregate, applying backward-fill for blank lines within each block and date filter
+  blocks.forEach(block => {
+    if(!block.date || block.date < from || block.date > to) return;
+    if(!block.employee) return;
+
+    employeeSet.add(block.employee);
+    daysSet.add(block.date);
+
+    const edKey = `${block.date}|${block.employee}`;
+    if(!employeeDayTotals[edKey]) employeeDayTotals[edKey] = { date: block.date, employee: block.employee, hours: 0 };
+
+    let lastKnownLine = '';
+    for(let i = block.rows.length - 1; i >= 0; i--) {
+      if(block.rows[i].line) {
+        lastKnownLine = block.rows[i].line;
+      } else {
+        block.rows[i].line = lastKnownLine;
+      }
+    }
+
+    block.rows.forEach(({line, prod, hrs}) => {
+      if(!line || hrs <= 0) return;
+
+      totalHours += hrs;
+      totalCost  += hrs * EMPLOYMENT_RATES.blendedHr;
+      employeeDayTotals[edKey].hours = parseFloat((employeeDayTotals[edKey].hours + hrs).toFixed(2));
+
+      if(!lineTotals[line]) lineTotals[line] = { hours:0, cost:0 };
+      lineTotals[line].hours = parseFloat((lineTotals[line].hours + hrs).toFixed(2));
+      lineTotals[line].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
+
+      const key = `${line}|${prod}`;
+      if(!productTotals[key]) productTotals[key] = { line, product:prod, hours:0, employees:new Set(), cost:0 };
+      productTotals[key].hours = parseFloat((productTotals[key].hours + hrs).toFixed(2));
+      productTotals[key].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
+      productTotals[key].employees.add(block.employee);
+
+      if(!dailyTotals[block.date]) dailyTotals[block.date] = { hours:0, cost:0 };
+      dailyTotals[block.date].hours = parseFloat((dailyTotals[block.date].hours + hrs).toFixed(2));
+      dailyTotals[block.date].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
+    });
+  });
+
+  const productTotalsClean = {};
+  Object.entries(productTotals).forEach(([key, val]) => {
+    productTotalsClean[key] = {
+      line:      val.line,
+      product:   val.product,
+      hours:     val.hours,
+      employees: val.employees.size,
+      cost:      val.cost,
+    };
+  });
+
+  // ── OT CALCULATION ───────────────────────────────────────────────────────
+  // Rule (confirmed with user): per employee, per day, hours above 9 on a
+  // normal day are OT at 1.5x. On a Sunday or Poya day, the ENTIRE day's
+  // hours are at 2.0x (DOT) instead of the normal 1.0x/1.5x split.
+  // This requires per-employee-per-day totals (employeeDayTotals), not just
+  // an aggregate hours-vs-capacity estimate.
+  const blendedHr = EMPLOYMENT_RATES.blendedHr;
+  let normalHours = 0, otHours = 0, dotHours = 0;
+  let normalCost  = 0, otCost  = 0, dotCost  = 0;
+
+  Object.values(employeeDayTotals).forEach(({date, hours}) => {
+    if(hours <= 0) return;
+    if(isSundayOrPoya(date)) {
+      dotHours += hours;
+      dotCost  += hours * blendedHr * 2.0;
+    } else if(hours > 9) {
+      const normalPart = 9;
+      const otPart      = hours - 9;
+      normalHours += normalPart;
+      otHours     += otPart;
+      normalCost  += normalPart * blendedHr;
+      otCost      += otPart * blendedHr * 1.5;
+    } else {
+      normalHours += hours;
+      normalCost  += hours * blendedHr;
+    }
+  });
+
+  console.log('parseLabourCSV: daysSet=', [...daysSet], 'totalHours=', totalHours, 'employees=', employeeSet.size, 'lines=', Object.keys(lineTotals).length);
+  console.log('parseLabourCSV OT breakdown: normal=', normalHours.toFixed(1), 'OT=', otHours.toFixed(1), 'DOT=', dotHours.toFixed(1));
+  return {
+    filesFound:    daysSet.size,
+    daysFound:     daysSet.size,
+    filesProcessed:daysSet.size,
+    availableDates:[...daysSet].sort(),
+    employees:     employeeSet.size,
+    totalHours:    parseFloat(totalHours.toFixed(2)),
+    totalCost:     Math.round(totalCost),
+    lineTotals,
+    productTotals: productTotalsClean,
+    dailyTotals,
+    employeeDayTotals,
+    otBreakdown: {
+      normalHours: parseFloat(normalHours.toFixed(2)),
+      otHours:     parseFloat(otHours.toFixed(2)),
+      dotHours:    parseFloat(dotHours.toFixed(2)),
+      normalCost:  Math.round(normalCost),
+      otCost:      Math.round(otCost),
+      dotCost:     Math.round(dotCost),
+    },
+    rates: {
+      blendedHr: EMPLOYMENT_RATES.blendedHr,
+    },
+  };
+}
+// ── PRODUCTION SOURCES — Standard headcount and output per product ────────────
+// Loaded from sources sheet CSV via prodSrc URL — updated automatically
+// Format: { 'Product Name|Stage': { headcount, csPerHr, line, kgPerCS } }
+let PROD_STANDARDS = {};  // populated from sources sheet on connect
+
+function buildProdStandards(srcRows) {
+  PROD_STANDARDS = {};
+  if(!srcRows || srcRows.length === 0) return;
+  
+  console.log('srcRows count:', srcRows.length);
+  if(srcRows.length > 0) {
+    console.log('srcRow[0] keys:', Object.keys(srcRows[0]).slice(0,6).join(', '));
+    console.log('srcRow[0] vals:', Object.values(srcRows[0]).slice(0,6).join(' | '));
+  }
+  if(srcRows.length > 5) {
+    console.log('srcRow[5] vals:', Object.values(srcRows[5]).slice(0,8).join(' | '));
+  }
+
+  srcRows.forEach((r, idx) => {
+    const vals = Object.values(r);
+    // Try to find product name - it's a long descriptive string
+    // Sources sheet: col B=product name, C=stage, D=headcount, E=CS/hr, H=kg/CS, K=line
+    // After CSV parsing with correct headers these become cols 1,2,3,4,7,10
+    let product='', stage='', headcount=0, csPerHr=0, kgPerCS=0, line='';
+    
+    // Try named keys first
+    product   = String(r['fg_sku']||r['product_sku']||r['product']||vals[1]||'').trim();
+    stage     = String(r['stage']||vals[2]||'').trim();
+    headcount = parseFloat(r['headcount']||r['no_of_labour']||vals[3]||0)||0;
+    csPerHr   = parseFloat(r['cs_hr']||r['hr_cs_batch']||vals[4]||0)||0;
+    kgPerCS   = parseFloat(r['kg_cs']||r['per_cs_kg']||vals[7]||0)||0;
+    line      = String(r['line']||r['line_code']||vals[10]||'').trim();
+
+    // Skip non-product rows
+    if(!product || product.length < 3) return;
+    if(product.toLowerCase().includes('feed') || product.toLowerCase().includes('fg sku')) return;
+    if(headcount === 0 && csPerHr === 0) return;
+
+    if(!PROD_STANDARDS[product] || csPerHr > 0) {
+      PROD_STANDARDS[product] = { headcount, csPerHr, kgPerCS, line, stage };
+    }
+  });
+  console.log('PROD_STANDARDS built:', Object.keys(PROD_STANDARDS).length, 'products');
+  if(Object.keys(PROD_STANDARDS).length > 0) {
+    const k = Object.keys(PROD_STANDARDS)[0];
+    console.log('Sample:', k, '=', JSON.stringify(PROD_STANDARDS[k]));
+  }
+}
+
+// ── SRI LANKA POYA DAYS (2026) — sourced from publicholidays.lk Government Gazette ──
+// NOTE: Poya dates follow the Buddhist lunar calendar and shift every year.
+// This list must be updated annually. Currently covers 2026 only.
+const POYA_DAYS_2026 = new Set([
+  '2026-01-03','2026-02-01','2026-03-02','2026-04-01','2026-05-01','2026-05-02',
+  '2026-05-30','2026-06-29','2026-07-29','2026-08-27','2026-09-26','2026-10-25',
+  '2026-11-24','2026-12-23'
+]);
+
+function isSundayOrPoya(dateStr) {
+  if(!dateStr) return false;
+  const d = new Date(dateStr + 'T00:00:00');
+  const isSunday = d.getDay() === 0;
+  const isPoya = POYA_DAYS_2026.has(dateStr);
+  return isSunday || isPoya;
+}
+
+// ── EMPLOYMENT COST RATES (confirmed from Production DB sources sheet) ────────
+const EMPLOYMENT_RATES = {
+  helper:   { fixedDaily:2520.00, fixedHr:315.00, otHr:225.00, dotHr:300.00, blended:239.375 },
+  operator: { fixedDaily:2850.00, fixedHr:356.25, otHr:262.50, dotHr:350.00, blended:273.021 },
+  blendedHr:  256.20,
+  blendedDay: 3074.375,
+};
+
+// ── HELPER: Calculate employee daily cost based on actual hours ───────────────
+function calcDailyCost(role, hours, isSundayOrPoya) {
+  const r = EMPLOYMENT_RATES[role] || EMPLOYMENT_RATES.helper;
+  if(isSundayOrPoya) return r.fixedDaily + hours * r.dotHr;
+  if(hours <= 8)     return r.fixedDaily;
+  if(hours <= 11)    return r.fixedDaily + (hours - 8) * r.otHr;
+  return r.fixedDaily + 3 * r.otHr + (hours - 11) * r.otHr;
+}
+
+let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodSources={};
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+const lname=c=>LM[c]||c;
+const $=id=>document.getElementById(id);
+const fmt=n=>{if(!isFinite(n))return'–';if(n>=1e6)return'LKR '+(n/1e6).toFixed(2)+'M';if(n>=1000)return'LKR '+(n/1000).toFixed(1)+'K';return'LKR '+Math.round(n).toLocaleString();};
+const fmtF=n=>'LKR '+Math.round(n).toLocaleString('en-US');
+const fmtKg=n=>n>0?'LKR '+(n).toFixed(2)+'/kg':'–';
+const nowStr=()=>new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+const toInputDate=d=>d.toISOString().slice(0,10);
+const pct=(a,b)=>b>0?(a/b*100).toFixed(1):'0.0';
+
+// ── QUICK DATES ───────────────────────────────────────────────────────────────
+function setToday(){const t=toInputDate(new Date());$('f-from').value=t;$('f-to').value=t;applyFilters();}
+function setThisWeek(){const now=new Date(),day=now.getDay(),mon=new Date(now);mon.setDate(now.getDate()-(day===0?6:day-1));$('f-from').value=toInputDate(mon);$('f-to').value=toInputDate(now);applyFilters();}
+function setThisMonth(){const now=new Date();$('f-from').value=toInputDate(new Date(now.getFullYear(),now.getMonth(),1));$('f-to').value=toInputDate(now);applyFilters();}
+
+// ── CSV PARSER ────────────────────────────────────────────────────────────────
+async function fetchCSV(url){
+  if(!url)return[];
+  try{
+    const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const fetchUrl = isLocal ? 'https://corsproxy.io/?' + encodeURIComponent(url + '&t=' + Date.now()) : url + '&t=' + Date.now();
+    // 15 second timeout per source
+    const controller = new AbortController();
+    const timeout = setTimeout(()=>controller.abort(), 15000);
+    const r=await fetch(fetchUrl,{cache:'no-store', signal:controller.signal});
+    clearTimeout(timeout);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const txt=await r.text();
+    const lines=txt.trim().split('\n');
+    if(lines.length<2)return[];
+    const parseRow=row=>{const res=[];let cur='',inQ=false;for(let i=0;i<row.length;i++){const ch=row[i];if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){res.push(cur.trim());cur='';}else cur+=ch;}res.push(cur.trim());return res;};
+    // Find real header row — must have multiple SHORT field-name cells, with at
+    // least one cell being an exact (not substring) match to a known field name.
+    // Sheets with multi-row titles (e.g. "Line - SKU - Stage" / "DOC. NO" labels
+    // above the real header) can falsely match on substrings like "sku" inside a
+    // longer label — so we require an EXACT cell match for the strongest signal
+    // (date/month/asset), and only fall back to substring matching as a weaker check.
+    const EXACT_HEADER_WORDS = ['date','month','asset','line','product','sku','headcount'];
+    let headerIdx=0;
+    let bestScore = -1;
+    for(let i=0;i<Math.min(8,lines.length);i++){
+      const vals=parseRow(lines[i]).map(v=>v.replace(/"/g,'').trim());
+      const nonEmpty=vals.filter(v=>v!=='').length;
+      const firstNonEmpty=(vals.find(v=>v!=='')||'').toLowerCase();
+      const firstLen=firstNonEmpty.length;
+      // Skip rows where the first non-empty cell is a long sentence (title/instruction rows)
+      if(firstLen > 30) continue;
+      // Skip fully empty rows
+      if(nonEmpty === 0) continue;
+      const lowerVals = vals.map(v=>v.toLowerCase().trim());
+      const hasDataDate = vals.some(v=>/^20[0-9]{2}-/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v));
+      if(hasDataDate) continue; // never treat an actual data row as header
+
+      // Exact match scoring: count how many cells exactly equal a known field word
+      const exactMatches = lowerVals.filter(v => EXACT_HEADER_WORDS.includes(v)).length;
+      // Weak substring fallback score (only used if no exact-match row found anywhere)
+      const joined=lowerVals.join('|');
+      const hasFieldNamesSubstring = (joined.includes('date') || joined.includes('month') || joined.includes('asset')
+                           || joined.includes('sku') || joined.includes('labor') || joined.includes('labour')
+                           || joined.includes('headcount') || joined.includes('product'))
+                         && nonEmpty >= 3;
+
+      if(exactMatches >= 2) {
+        // Strong signal: multiple cells are exact field-name matches. Best possible header row.
+        headerIdx = i; bestScore = 1000; break;
+      } else if(exactMatches === 1 && bestScore < 100) {
+        headerIdx = i; bestScore = 100;
+      } else if(hasFieldNamesSubstring && bestScore < 10) {
+        headerIdx = i; bestScore = 10;
+      }
+    }
+    const hdrs=parseRow(lines[headerIdx]).map(h=>h.replace(/"/g,'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
+    console.log('CSV hdrs['+headerIdx+']',url.slice(-25),hdrs.slice(0,6).join(','));
+    return lines.slice(headerIdx+1).map(line=>{
+      const vals=parseRow(line);const obj={};
+      hdrs.forEach((h,i)=>{obj[h]=vals[i]?vals[i].replace(/"/g,'').trim():'';});
+      return obj;
+    }).filter(r=>Object.values(r).filter(v=>v!=='').length>=1);
+  }catch(e){console.error('CSV error:',url.slice(-30),e);return[];}
+}
+
+// ── WEB APP FETCH ─────────────────────────────────────────────────────────────
+async function fetchWebApp(url,from,to){
+  if(!url)return null;
+  try{
+    const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const fullUrl = `${url}${url.includes('?')?'&':'?'}from=${from}&to=${to}&t=${Date.now()}`;
+    const fetchUrl = isLocal ? 'https://corsproxy.io/?' + encodeURIComponent(fullUrl) : fullUrl;
+    const r=await fetch(fetchUrl,{cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();if(d.error)throw new Error(d.error);return d;}
+  catch(e){console.error('WebApp error:',e);return null;}
+}
+
+// ── FILTER DATA BY DATE ───────────────────────────────────────────────────────
+function filterByDate(rows,dateCol,from,to,preferFormat){
+  // Engineering Costs, Electricity Daily, and Capex Register: team types dates as
+  // plain D/M/YYYY text (confirmed via unambiguous values like 19/5/2026, where
+  // 19 cannot be a month) — same day-first convention as Labour Allocation.
+  // Production DB is the one sheet confirmed to use real Excel Date-type cells
+  // exported as M/D/YYYY, and that call site passes 'MD' explicitly.
+  preferFormat = preferFormat || 'DM';
+  return rows.filter(r=>{
+    let d=String(r[dateCol]||'').trim();
+    if(!d) return false;
+    // Normalise date to YYYY-MM-DD for comparison
+    d = normaliseDate(d, preferFormat);
+    return d>=from&&d<=to;
+  });
+}
+
+// normaliseDate: converts various date string formats to YYYY-MM-DD.
+// preferFormat: 'DM' (day-first, default — Labour Allocation Master, which stores
+//   plain DD/MM/YYYY text) or 'MD' (month-first — Production DB, Engineering,
+//   Electricity, Capex sheets, which use real Excel Date-type cells that Google
+//   Sheets always exports as M/D/YYYY regardless of the cell's display format).
+function normaliseDate(d, preferFormat){
+  if(!d) return '';
+  d = d.trim();
+  preferFormat = preferFormat || 'DM';
+  // Already YYYY-MM-DD or timestamp
+  if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/.test(d)) return d.slice(0,10);
+  // X/X/YYYY format
+  const m1 = d.match(/^([0-9]{1,2})\/([0-9]{1,2})\/([0-9]{4})/);
+  if(m1) {
+    const part1 = parseInt(m1[1]);
+    const part2 = parseInt(m1[2]);
+    const year  = m1[3];
+    let day, month;
+    if(part1 > 12 && part2 <= 12) {
+      // part1 can't be a month -> must be DD/MM/YYYY regardless of preference
+      day = part1; month = part2;
+    } else if(part2 > 12 && part1 <= 12) {
+      // part2 can't be a month -> must be MM/DD/YYYY regardless of preference
+      month = part1; day = part2;
+    } else if(preferFormat === 'MD') {
+      // Ambiguous -> use month-first (Production DB / Excel Date-type export default)
+      month = part1; day = part2;
+    } else {
+      // Ambiguous -> use day-first (Labour Allocation Master plain-text standard)
+      day = part1; month = part2;
+    }
+    return year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+  }
+  // DD-MM-YYYY with dashes
+  const m2 = d.match(/^([0-9]{1,2})-([0-9]{1,2})-([0-9]{4})/);
+  if(m2) return m2[3]+'-'+m2[2].padStart(2,'0')+'-'+m2[1].padStart(2,'0');
+  return d;
+}
+function getFiltered(){const from=$('f-from').value,to=$('f-to').value;return SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);}
+
+// ── CONNECT ALL ───────────────────────────────────────────────────────────────
+let connectRequestId = 0;
+async function connectAll(){
+  const myRequestId = ++connectRequestId;
+  const bar=$('live-bar'),bt=$('live-bar-text'),btn=$('connect-btn');
+  const from=$('f-from').value||'2026-06-02', to=$('f-to').value||'2026-06-02';
+  if(bar)bar.className='live-bar disconnected';
+  if(bt)bt.textContent='⏳ Fetching Labour, Engineering, Electricity, Production data…';
+  if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
+  console.log('connectAll starting for range:', from, 'to', to, 'requestId:', myRequestId);
+
+  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows]=await Promise.all([
+    fetchCSV(URLS.labourCSV),
+    fetchCSV(URLS.eng),
+    fetchCSV(URLS.elecDaily),
+    fetchCSV(URLS.elecBill),
+    fetchCSV(URLS.capex),
+    fetchCSV(URLS.prodDB),
+    fetchCSV(URLS.prodSrc),
+  ]);
+
+  // Ignore stale responses if a newer request has started
+  if(myRequestId !== connectRequestId) {
+    console.log('Ignoring stale response for requestId:', myRequestId, '(current:', connectRequestId, ')');
+    return;
+  }
+
+  // Parse labour allocation CSV
+  if(labRows.length > 0) {
+    allocData = parseLabourCSV(labRows, from, to);
+  }
+  engData   = filterByDate(engRows,'date',from,to);
+  elecDaily = filterByDate(elecDRows,'date',from,to);
+  elecBill  = elecBRows; // all months
+  capexData = capRows;
+  // Debug all sources
+  
+  // Production DB — use positional columns (structure is fixed)
+  // Sheet cols: [0]=idx [1]=date [2]=shift [3]=line [4]=product_sku [5]=stage
+  // [6]=avail_time [7]=total_time [8]=break_time [9]=net_avail [10]=total_labor
+  // [11]=labor_minus [12]=run_time_hr [13]=planned_cs [14]=planned_kg
+  // [15]=planned_kg_cum [16]=actual_cs [17]=actual_kg
+  if(prodRows.length > 0) {
+    const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
+    
+    prodData = prodRows.map(r => {
+      const vals = Object.values(r);
+      // Find date value - look for value matching date pattern
+      let dateVal='', lineVal='', prodVal='', stageVal='';
+      for(let i=0;i<vals.length;i++){
+        const v = String(vals[i]||'').trim();
+        if(!dateVal && (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v))) {
+          dateVal=normaliseDate(v, 'MD'); // Production DB: real Excel Date cells export as M/D/YYYY
+        }
+        if(!lineVal && /^[A-Z]{2,6}$/.test(v) && v!=='DAY'&&v!=='OEE') lineVal=v;
+      }
+      // Product and stage are typically after line code
+      const keys = Object.keys(r);
+      const lineIdx = keys.findIndex(k=>r[k]===lineVal);
+      if(lineIdx>=0){
+        prodVal  = String(vals[lineIdx+1]||'').trim();
+        stageVal = String(vals[lineIdx+2]||'').trim();
+      }
+      return {
+        date:              dateVal,
+        line:              lineVal,
+        product_sku:       prodVal,
+        stage:             stageVal,
+        run_time_hr:       r['run_time_hr']||vals[12],
+        planned_out_put_cs:r['planned_out_put_cs']||vals[13],
+        actual_out_put_cs: r['actual_out_put_cs']||vals[15],
+        actual_out_put_kg: r['actual_out_put_kg']||vals[16],
+        actual_labour_hr:  r['actual_labour_hr']||r['total_labor_hr']||vals[10],
+        planned_labour_hr: r['planned_labour_hr']||vals[13],
+      };
+    }).filter(r => r.date && r.date >= from && r.date <= to);
+    
+    console.log('prodData rows:', prodData.length, 'from', prodRows.length, 'total, range:', from, 'to', to);
+    if(prodData.length > 0) console.log('Sample:', JSON.stringify(prodData[0]));
+  } else {
+    prodData = [];
+  }
+  if(srcRows.length>0) parseProdSources(srcRows);
+
+  // Build status
+  const parts=[];
+  if(allocData && allocData.totalHours > 0) {
+    parts.push(`✅ Labour: ${allocData.daysFound} day(s) · ${allocData.totalHours.toFixed(1)}h · LKR ${Math.round(allocData.totalCost).toLocaleString()}`);
+  } else if(labRows.length > 0) {
+    parts.push(`⚠️ Labour: CSV connected (${labRows.length} rows) but no data for selected range`);
+  }
+  if(engRows.length>0)parts.push(`✅ Maintenance: ${engData.length} entries`);
+  if(elecDRows.length>0)parts.push(`✅ Electricity: ${elecDaily.length} daily records`);
+  if(elecBRows.length>0)parts.push(`✅ Bills: ${elecBRows.length} months`);
+  if(capRows.length>0)parts.push(`✅ Capex: ${capRows.length} assets`);
+  if(prodRows.length>0)parts.push(`✅ Production DB: ${prodData.length} records (${from} to ${to})`);
+
+  if(parts.length>0){
+    if(bar)bar.className='live-bar connected';
+    if(bt)bt.textContent=parts.join(' · ')+' · '+nowStr();
+    if(btn){btn.textContent='↻ Refresh';btn.disabled=false;btn.style.background='';}
+    // Update header status
+    const cl=document.getElementById('conn-label');
+    if(cl){cl.textContent='Live ·';cl.style.color='var(--green)';}
+    const rdot=document.getElementById('rdot');
+    if(rdot){rdot.classList.add('pulse');rdot.style.background='var(--green)';}
+    const lbt=document.getElementById('live-bar-time');
+    if(lbt)lbt.textContent=nowStr();
+  }else{
+    if(bar)bar.className='live-bar error';
+    if(bt)bt.textContent='❌ Could not connect to any data source. Check URLs and internet connection.';
+    if(btn){btn.textContent='🔌 Connect All';btn.disabled=false;btn.style.background='';}
+  }
+
+  // Always render - even if some sources have no data for selected range
+  renderAll();
+  // Explicitly re-render sections that depend on allocData
+  const c2 = calcCosts($('f-from').value, $('f-to').value);
+  renderLabour(c2);
+  renderHourlyRates();
+}
+
+// ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
+function parseProdSources(rows) {
+  // Extract employment rates
+  prodSources = { rates: {}, standards: {} };
+  rows.forEach(r => {
+    const label = String(r[''] || r[Object.keys(r)[0]] || '').trim().toLowerCase();
+    const val1  = Object.values(r)[1];
+    const val2  = Object.values(r)[3];
+    if(label.includes('hr cost') || label.includes('hr_cost')) {
+      prodSources.rates.helperHr   = parseFloat(val1) || 239.375;
+      prodSources.rates.operatorHr = parseFloat(val2) || 273.021;
+    }
+    if(label.includes('avg labor cost hr') || label.includes('avg_labor_cost_hr')) {
+      prodSources.rates.blendedHr = parseFloat(val1) || 256.20;
+    }
+  });
+  if(!prodSources.rates.blendedHr) prodSources.rates.blendedHr = EMPLOYMENT_RATES.blendedHr;
+  if(!prodSources.rates.helperHr)  prodSources.rates.helperHr  = EMPLOYMENT_RATES.helper.blended;
+  if(!prodSources.rates.operatorHr)prodSources.rates.operatorHr= EMPLOYMENT_RATES.operator.blended;
+
+  // Also build product standards lookup
+  buildProdStandards(rows);
+}
+
+// ── GET ACTUAL PRODUCTION DATA FOR DATE RANGE ─────────────────────────────────
+function getProdActuals(from, to) {
+  if(!prodData || prodData.length === 0) return null;
+
+  const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
+
+  // Batch lines excluded from volume (but included in cost)
+  const BATCH_LINES = ['DPML','LBML','CRWL','PRL','FGL','PCL','AFPL','BPL','CPL'];
+
+  const lineAgg = {}, dailyAgg = {}, productAgg = {};
+  let totalKg = 0, totalCS = 0, totalRunHrs = 0, totalLabHrs = 0;
+
+  prodData.forEach(r => {
+    const date    = String(r['date']||'').trim();
+    const line    = String(r['line']||r['production_line']||'').trim();
+    const product = String(r['product']||r['product_description']||'').trim();
+    const runHrs  = sf(r['run_time_hr']||r['run_time']||r['runtime']||0);
+    const actCS   = sf(r['actual_cs']||r['actual_output_cs']||0);
+    const actKg   = sf(r['actual_kg']||r['actual_output_kg']||0);
+    const labHrs  = sf(r['actual_labour_hrs']||r['actual_hrs']||r['actual_labor_hrs']||0);
+    const planCS  = sf(r['planned_cs']||r['planned_output_cs']||0);
+    const planHrs = sf(r['planned_hrs']||r['planned_labour_hrs']||0);
+
+    if(!line) return;
+    const isBatch = BATCH_LINES.includes(line);
+
+    // Line aggregation
+    if(!lineAgg[line]) lineAgg[line] = {runHrs:0,labHrs:0,actCS:0,actKg:0,planCS:0,planHrs:0,isBatch};
+    lineAgg[line].runHrs  += runHrs;
+    lineAgg[line].labHrs  += labHrs;
+    lineAgg[line].actCS   += actCS;
+    lineAgg[line].actKg   += actKg;
+    lineAgg[line].planCS  += planCS;
+    lineAgg[line].planHrs += planHrs;
+
+    // Daily aggregation
+    if(!dailyAgg[date]) dailyAgg[date] = {actKg:0,actCS:0,runHrs:0,labHrs:0};
+    if(!isBatch) {
+      dailyAgg[date].actKg += actKg;
+      dailyAgg[date].actCS += actCS;
+      totalKg += actKg;
+      totalCS += actCS;
+    }
+    dailyAgg[date].runHrs += runHrs;
+    dailyAgg[date].labHrs += labHrs;
+    totalRunHrs += runHrs;
+    totalLabHrs += labHrs;
+
+    // Product aggregation
+    if(product && !isBatch) {
+      if(!productAgg[product]) productAgg[product] = {line,runHrs:0,actCS:0,actKg:0,planCS:0};
+      productAgg[product].runHrs += runHrs;
+      productAgg[product].actCS  += actCS;
+      productAgg[product].actKg  += actKg;
+      productAgg[product].planCS += planCS;
+    }
+  });
+
+  const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
+
+  return {
+    lineAgg, dailyAgg, productAgg,
+    totalKg, totalCS, totalRunHrs, totalLabHrs,
+    blendedHr,
+    labourCostTotal: totalRunHrs * blendedHr,
+    labPerKg:  totalKg > 0 ? (totalRunHrs * blendedHr) / totalKg : 0,
+    labPerCS:  totalCS > 0 ? (totalRunHrs * blendedHr) / totalCS : 0,
+    effPct:    totalRunHrs > 0 ? (totalRunHrs / totalLabHrs * 100) : 0,
+  };
+}
+
+// ── RENDER HOURLY RATES SECTION ──────────────────────────────────────────────
+function renderHourlyRates() {
+  if(!allocData || allocData.filesFound === 0) return;
+
+  const pt        = allocData.productTotals || {};
+  const blendedHr = EMPLOYMENT_RATES.blendedHr;
+  const lineFilter = document.getElementById('hr-line-filter') ?
+                     document.getElementById('hr-line-filter').value : 'all';
+  const viewMode   = document.getElementById('hr-view-mode') ?
+                     document.getElementById('hr-view-mode').value : 'perCS';
+
+  // Build product actuals from Production DB
+  const prodActuals = {};
+  prodData.forEach(r => {
+    const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
+    const product = String(r['product_sku']||r['product']||'').trim();
+    const runHrs  = sf(r['run_time_hr']||0);
+    const actCS   = sf(r['actual_out_put_cs']||0);
+    const actKg   = sf(r['actual_out_put_kg']||0);
+
+    if(product && (actCS > 0 || actKg > 0)) {
+      if(!prodActuals[product]) prodActuals[product] = { runHrs:0, actCS:0, actKg:0 };
+      prodActuals[product].runHrs += runHrs;
+      prodActuals[product].actCS  += actCS;
+      prodActuals[product].actKg  += actKg;
+    }
+  });
+
+  // Combine allocation hours with production actuals
+  const products = [];
+  Object.entries(pt).forEach(([key, alloc]) => {
+    const lineName = alloc.line || '';
+    const prodName = alloc.product || '';
+    if(lineFilter !== 'all' && !lineName.toLowerCase().includes(lineFilter.toLowerCase())) return;
+
+    const actuals  = prodActuals[prodName] || { runHrs:0, actCS:0, actKg:0 };
+    const labCost  = Math.round(alloc.hours * blendedHr);
+
+    // Standard from sources sheet
+    const std      = PROD_STANDARDS[prodName] || {};
+    const stdCShr  = std.csPerHr || 0;
+    const stdHC    = std.headcount || 0;
+    const stdCostPerCS = stdCShr > 0 ? Math.round((stdHC * blendedHr) / stdCShr * 100) / 100 : 0;
+
+    // Actual cost per CS using total allocated hours
+    const actCostPerCS = actuals.actCS > 0 ? Math.round(labCost / actuals.actCS * 100) / 100 : 0;
+    const actCostPerKg = actuals.actKg > 0 ? Math.round(labCost / actuals.actKg * 100) / 100 : 0;
+
+    // Cost per hour = total labour cost ÷ run time
+    const costPerHr = actuals.runHrs > 0 ?
+      Math.round(labCost / actuals.runHrs) : 0;
+
+    products.push({
+      key, lineName, prodName,
+      allocHrs:  alloc.hours,
+      employees: alloc.employees,
+      labCost,
+      costPerHr,
+      actCS:     actuals.actCS,
+      actKg:     actuals.actKg,
+      runHrs:    actuals.runHrs,
+      actCostPerCS,
+      actCostPerKg,
+      stdCostPerCS,
+      stdHC,
+      variance:  stdCostPerCS > 0 ? Math.round((actCostPerCS - stdCostPerCS) * 100) / 100 : 0,
+    });
+  });
+
+  // Sort by labour cost descending
+  products.sort((a,b) => b.labCost - a.labCost);
+
+  // Populate line filter dropdown
+  const lineSelect = document.getElementById('hr-line-filter');
+  if(lineSelect && lineSelect.options.length === 1) {
+    const lines = [...new Set(Object.values(pt).map(v=>v.line).filter(Boolean))].sort();
+    lines.forEach(l => {
+      const o = document.createElement('option');
+      o.value = l; o.textContent = l;
+      lineSelect.appendChild(o);
+    });
+  }
+
+  // Update subtitle
+  const subEl = document.getElementById('hr-chart-sub');
+  if(subEl) subEl.textContent =
+    `${allocData.filesFound} day(s) · ${products.length} products · ` +
+    `${document.getElementById('f-from').value} to ${document.getElementById('f-to').value}`;
+
+  // Render line chart
+  if(charts.hr) charts.hr.destroy();
+  const showProducts = products.filter(p => p.actCostPerCS > 0).slice(0, 20);
+  if(showProducts.length > 0) {
+    charts.hr = new Chart(document.getElementById('hrChart').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: showProducts.map(p => p.prodName.length > 30 ? p.prodName.slice(0,28)+'…' : p.prodName),
+        datasets: [
+          {
+            label: viewMode==='perCS'?'Actual LKR/CS':viewMode==='perHr'?'Actual LKR/Hr':'Actual LKR/kg',
+            data: showProducts.map(p => viewMode==='perCS'?p.actCostPerCS:viewMode==='perHr'?p.costPerHr:p.actCostPerKg),
+            backgroundColor: showProducts.map(p =>
+              p.variance > 0 ? 'rgba(192,57,43,0.7)' : 'rgba(26,95,168,0.7)'
+            ),
+            borderRadius: 4,
+            order: 1,
+          },
+          {
+            label: 'Standard LKR/CS',
+            data: showProducts.map(p => viewMode==='perCS'?p.stdCostPerCS:0),
+            type: 'line',
+            borderColor: '#e8a000',
+            borderDash: [6,4],
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: false,
+            order: 0,
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { labels: { font: { size: 9 }, padding: 8, boxWidth: 10 } },
+          tooltip: {
+            callbacks: {
+              label: c => {
+                const p = showProducts[c.dataIndex];
+                if(c.datasetIndex === 0) return `Actual: LKR ${c.parsed.y}/CS · ${p.actCS} CS · ${p.allocHrs}h allocated`;
+                return `Standard: LKR ${c.parsed.y}/CS (${p.stdHC} people × ${EMPLOYMENT_RATES.blendedHr}/hr)`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 8 }, color: '#4a5068', maxRotation: 45 } },
+          y: { grid: { color: '#eef0f4' }, ticks: { font: { size: 9 }, color: '#8b92a5', callback: v => 'LKR '+v } }
+        }
+      }
+    });
+  }
+
+  // Render table
+  const tableCard = document.getElementById('hr-table-card');
+  if(tableCard) tableCard.style.display = products.length > 0 ? '' : 'none';
+
+  const subEl2 = document.getElementById('hr-table-sub');
+  if(subEl2) subEl2.textContent = `${products.length} products · Total labour cost: LKR ${Math.round(products.reduce((s,p)=>s+p.labCost,0)).toLocaleString()}`;
+
+  document.getElementById('hr-tbody').innerHTML = products.map(p => {
+    const varClass = p.variance > 0 ? 'color:var(--red)' : p.variance < 0 ? 'color:var(--green)' : '';
+    return `<tr>
+      <td style="text-align:left;font-size:11px">${p.prodName}</td>
+      <td style="text-align:left;font-size:11px;color:var(--text2)">${p.lineName}</td>
+      <td style="text-align:right">${p.allocHrs.toFixed(2)}</td>
+      <td style="text-align:right">${p.runHrs > 0 ? p.runHrs.toFixed(2)+'h' : '–'}</td>
+      <td style="text-align:right">${p.stdHC||'–'}</td>
+      <td style="text-align:right;font-weight:600">LKR ${p.labCost.toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700;background:var(--teal-lt);color:var(--teal)">${p.costPerHr > 0 ? 'LKR '+p.costPerHr : '–'}</td>
+      <td style="text-align:right">${p.actCS > 0 ? p.actCS.toLocaleString() : '–'}</td>
+      <td style="text-align:right">${p.actKg > 0 ? p.actKg.toLocaleString() : '–'}</td>
+      <td style="text-align:right;font-weight:700;background:var(--blue-lt);color:var(--blue)">${p.actCostPerCS > 0 ? 'LKR '+p.actCostPerCS : '–'}</td>
+      <td style="text-align:right;background:var(--amber-lt);color:var(--amber)">${p.stdCostPerCS > 0 ? 'LKR '+p.stdCostPerCS : '–'}</td>
+      <td style="text-align:right;font-weight:600;${varClass}">${p.variance !== 0 ? (p.variance > 0 ? '+' : '')+p.variance : '–'}</td>
+      <td style="text-align:right">${p.actCostPerKg > 0 ? 'LKR '+p.actCostPerKg : '–'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('hr-tfoot').innerHTML = products.length > 0 ? `
+    <tr>
+      <td style="text-align:left;font-weight:700">TOTAL</td>
+      <td></td>
+      <td style="text-align:right;font-weight:700">${products.reduce((s,p)=>s+p.allocHrs,0).toFixed(2)}</td>
+      <td></td>
+      <td style="text-align:right;font-weight:700">LKR ${Math.round(products.reduce((s,p)=>s+p.labCost,0)).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700">${products.reduce((s,p)=>s+p.actCS,0).toLocaleString()}</td>
+      <td style="text-align:right;font-weight:700">${products.reduce((s,p)=>s+p.actKg,0).toLocaleString()}</td>
+      <td></td><td></td><td></td><td></td><td></td>
+    </tr>` : '';
+}
+
+// ── COST CALCULATIONS ─────────────────────────────────────────────────────────
+function calcCosts(from,to){
+  // Get live production actuals if available
+  const prod = getProdActuals(from, to);
+
+  // Labour — use run time from prod DB if available, else allocation hours
+  const labourHrs  = prod ? prod.totalRunHrs : (allocData&&allocData.filesFound>0 ? allocData.totalHours : 0);
+  const blendedHr  = (prodSources.rates&&prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
+  const labourCost = allocData&&allocData.filesFound>0 ? allocData.totalCost : (labourHrs * blendedHr);
+
+  // Maintenance (sum Amount column for date range)
+  let maintCost=0, maintFactory=0, maintMachinery=0, maintPreventive=0, maintBreakdown=0;
+  engData.forEach(r=>{
+    const amt=parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
+    maintCost+=amt;
+    const ct=String(r['cost_type']||'').toLowerCase();
+    const st=String(r['sub_type']||'').toLowerCase();
+    if(ct.includes('factory'))maintFactory+=amt;
+    if(ct.includes('machinery'))maintMachinery+=amt;
+    if(st.includes('prevent'))maintPreventive+=amt;
+    if(st.includes('break')||st.includes('correct'))maintBreakdown+=amt;
+  });
+
+  // Electricity
+  let elecKwh=0, elecCost=0;
+  elecDaily.forEach(r=>{
+    elecKwh+=parseFloat(r['kwh_consumed']||0)||0;
+    elecCost+=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
+  });
+  // If no cost calculated, derive from bill rate
+  if(elecCost===0&&elecKwh>0&&elecBill.length>0){
+    const lastBill=elecBill[elecBill.length-1];
+    const rate=parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
+    if(rate>0)elecCost=elecKwh*rate;
+  }
+
+  // Total kg — use live production DB if available, else embedded historical data
+  const rows = SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
+  const totalKg = prod && prod.totalKg > 0 ? prod.totalKg : rows.reduce((s,d)=>s+(d.kg_a||0),0);
+  const totalCS = prod && prod.totalCS > 0 ? prod.totalCS : rows.reduce((s,d)=>s+(d.pcs_a||0),0);
+
+  return{labourCost,labourHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,
+    totalCost:labourCost+maintCost+elecCost,
+    labPerKg:totalKg>0?labourCost/totalKg:0,
+    maintPerKg:totalKg>0?maintCost/totalKg:0,
+    elecPerKg:totalKg>0?elecCost/totalKg:0,
+    totalPerKg:totalKg>0?(labourCost+maintCost+elecCost)/totalKg:0,
+  };
+}
+
+// ── RENDER UNIT COST SUMMARY ──────────────────────────────────────────────────
+function renderUnitCost(c){
+  $('uc-labour').textContent = fmtKg(c.labPerKg);
+  $('uc-maint').textContent  = fmtKg(c.maintPerKg);
+  $('uc-elec').textContent   = fmtKg(c.elecPerKg);
+  $('uc-total').textContent  = fmtKg(c.totalPerKg);
+  const tot=c.totalCost||1;
+  $('uc-labour-pct').textContent = c.labourCost>0?`${(c.labourCost/tot*100).toFixed(1)}% of total cost`:'Connect Labour source';
+  $('uc-maint-pct').textContent  = c.maintCost>0?`${(c.maintCost/tot*100).toFixed(1)}% of total cost`:'No maintenance data yet';
+  $('uc-elec-pct').textContent   = c.elecCost>0?`${(c.elecCost/tot*100).toFixed(1)}% of total cost`:'No electricity data yet';
+  $('uc-total-sub').textContent  = c.totalKg>0?`Based on ${Math.round(c.totalKg).toLocaleString()} kg produced`:'kg data from Production DB';
+}
+
+// ── RENDER KPIs ───────────────────────────────────────────────────────────────
+function renderKPIs(rows,c){
+  const tp=rows.reduce((s,d)=>s+d.pc,0),ta=rows.reduce((s,d)=>s+d.ac,0);
+  const pp=rows.reduce((s,d)=>s+d.pcs_p,0),pa=rows.reduce((s,d)=>s+d.pcs_a,0);
+  const eff=pp>0?(pa/pp*100).toFixed(1):0;
+  const kpis=[
+    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
+    {c:'blue',l:'Labour Cost',v:fmt(c.labourCost),s:allocData&&allocData.totalHours>0?`${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:fmtKg(c.labPerKg),bt:'neu'},
+    {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
+    {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
+    {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
+    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database',b:c.totalKg>0?`${rows.length} days`:'–',bt:'neu'},
+  ];
+  $('kgrid').innerHTML=kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
+}
+
+// ── RENDER ALERTS ─────────────────────────────────────────────────────────────
+function renderAlerts(rows,c){
+  const alerts=[];
+  if(!allocData&&engData.length===0&&elecDaily.length===0)
+    alerts.push({t:'blue',i:'ℹ️',title:'No live data connected yet',body:'Click 🔌 Connect All to load Labour Allocation, Maintenance and Electricity data for the selected date range.'});
+  if(allocData&&allocData.filesFound===0) {
+    alerts.push({t:'amber',i:'⚠️',
+      title:'No Labour Allocation data for selected dates',
+      body:'The Labour Allocation Master sheet does not have entries within this date range yet. Adjust the date range or ask the team to add data for these days.'
+    });
+  }
+  // Live allocation alerts
+  if(allocData&&allocData.filesFound>0&&allocData.lineTotals) {
+    const lt=allocData.lineTotals;
+    const getH=v=>typeof v==='object'?v.hours:v;
+    // Check for lines with very high hours
+    Object.entries(lt).forEach(([line,data])=>{
+      const hrs=getH(data);
+      if(hrs>200) alerts.push({t:'amber',i:'⚠️',
+        title:`High hours on ${line} — ${hrs.toFixed(1)} hrs for period`,
+        body:`Total allocated hours for selected period. Review if this matches production plan.`});
+    });
+  }
+  // Maintenance alert
+  if(c.maintBreakdown>c.maintPreventive&&c.maintCost>0)
+    alerts.push({t:'amber',i:'⚠️',title:'Breakdown repairs exceeding preventive maintenance spend',body:`Breakdown/corrective: ${fmt(c.maintBreakdown)} vs preventive: ${fmt(c.maintPreventive)}. Review PM schedule.`});
+  // Historical DB alerts (only show if no live data)
+  if(!allocData||allocData.filesFound===0) {
+    const isl=SD.line_totals['ISL'];
+    if(isl&&isl.actual_cost>isl.planned_cost)
+      alerts.push({t:'amber',i:'📋',title:`ISL Historical Overrun (Jan–Mar 2026) — LKR ${Math.round(isl.actual_cost-isl.planned_cost).toLocaleString()}`,body:'Incense Sticks Line: actual 5,254 hrs vs planned 4,440 hrs (+18.3%). Historical reference only.'});
+  }
+  if(!alerts.length)
+    alerts.push({t:'green',i:'✅',title:'No critical cost alerts for selected period',body:'All monitored metrics within acceptable range.'});
+  $('alert-zone').innerHTML=alerts.map(a=>`<div class="abar ${a.t}"><span class="aicon">${a.i}</span><div><div class="atitle">${a.title}</div><div class="abody">${a.body}</div></div></div>`).join('');
+}
+
+// ── RENDER TREND CHART ────────────────────────────────────────────────────────
+function renderTrend(rows,c){
+  if(charts.trend)charts.trend.destroy();
+
+  // Use live daily totals if available, otherwise fall back to embedded SD data
+  let labels, labDates, labData;
+  if(allocData && allocData.dailyTotals && Object.keys(allocData.dailyTotals).length > 0) {
+    labDates = Object.keys(allocData.dailyTotals).sort();
+    labels   = labDates.map(d=>d.slice(5));
+    labData  = labDates.map(d=>allocData.dailyTotals[d].cost||0);
+  } else if(rows.length > 0) {
+    labDates = rows.map(d=>d.date);
+    labels   = rows.map(d=>d.date.slice(5));
+    labData  = rows.map(d=>d.ac);
+  } else {
+    // No data for selected range
+    labDates = [];
+    labels   = [];
+    labData  = [];
+  }
+
+  // Build REAL per-day Maintenance totals from engData (date + amount_lkr), keyed
+  // to the same date labels used for Labour — instead of spreading the period
+  // total evenly across days, which misrepresents which days actually had cost.
+  const maintByDate = {};
+  engData.forEach(r=>{
+    const d = normaliseDate(String(r['date']||'').trim());
+    const amt = parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/,/g,''))||0;
+    if(!d) return;
+    maintByDate[d] = (maintByDate[d]||0) + amt;
+  });
+
+  // Build REAL per-day Electricity totals from elecDaily (date + est_cost_lkr,
+  // falling back to kwh × latest bill rate when est_cost_lkr isn't populated —
+  // same fallback logic used for the period-total elecCost KPI).
+  let fallbackRate = 0;
+  if(elecBill.length>0){
+    const lastBill = elecBill[elecBill.length-1];
+    fallbackRate = parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
+  }
+  const elecByDate = {};
+  elecDaily.forEach(r=>{
+    const d = normaliseDate(String(r['date']||'').trim());
+    if(!d) return;
+    const kwh = parseFloat(r['kwh_consumed']||0)||0;
+    let cost = parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
+    if(cost===0 && kwh>0 && fallbackRate>0) cost = kwh*fallbackRate;
+    elecByDate[d] = (elecByDate[d]||0) + cost;
+  });
+
+  const maintData = labDates.map(d=>Math.round(maintByDate[d]||0));
+  const elecData  = labDates.map(d=>Math.round(elecByDate[d]||0));
+
+  const trendCanvas=$('trendChart');if(!trendCanvas)return;
+  charts.trend=new Chart(trendCanvas.getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Labour',data:labData,backgroundColor:'rgba(26,95,168,.7)',stack:'s'},
+      {label:'Maintenance',data:maintData,backgroundColor:'rgba(192,57,43,.65)',stack:'s'},
+      {label:'Electricity',data:elecData,backgroundColor:'rgba(232,163,25,.65)',stack:'s'},
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,
+      plugins:{legend:{labels:{font:{size:9},padding:8,boxWidth:10}},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.label+': LKR '+Math.round(c.parsed.y).toLocaleString()}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxTicksLimit:14,color:'#8b92a5'},stacked:true},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>'LKR '+(v/1000).toFixed(0)+'K'},stacked:true}}
+    }
+  });
+}
+
+// ── RENDER COST MIX PIE ───────────────────────────────────────────────────────
+function renderMix(c){
+  if(charts.mix)charts.mix.destroy();
+  const data=[c.labourCost,c.maintCost,c.elecCost].filter(v=>v>0);
+  const lbls=['Labour','Maintenance','Electricity'].filter((_,i)=>[c.labourCost,c.maintCost,c.elecCost][i]>0);
+  const cols=['#1a5fa8','#c0392b','#e8a000'];
+  const mixCanvas = $('mixChart');
+  const mixEmpty  = $('mixChartEmpty');
+  if(!data.length||!mixCanvas){
+    if(mixCanvas) mixCanvas.style.display='none';
+    if(mixEmpty)  mixEmpty.style.display='block';
+    return;
+  }
+  if(mixCanvas) mixCanvas.style.display='block';
+  if(mixEmpty)  mixEmpty.style.display='none';
+  charts.mix=new Chart(mixCanvas.getContext('2d'),{
+    type:'doughnut',
+    data:{labels:lbls,datasets:[{data,backgroundColor:cols.slice(0,data.length),borderWidth:2,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'58%',
+      plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:c=>`${c.label}: ${fmt(c.parsed)} (${(c.parsed/[c.labourCost,c.maintCost,c.elecCost].reduce((a,b)=>a+b,0)*100).toFixed(1)}%)`}}}
+    }
+  });
+}
+
+// ── RENDER LABOUR SECTION ─────────────────────────────────────────────────────
+function renderLabour(c){
+  // Labour KPI stream cards — use live allocation data if available
+  const hr = EMPLOYMENT_RATES.blendedHr;
+  const otHr  = EMPLOYMENT_RATES.helper.otHr;
+  const dotHr = EMPLOYMENT_RATES.helper.dotHr;
+
+  if(allocData && allocData.filesFound > 0) {
+    // Live data from ERP allocation
+    const totalHrs = allocData.totalHours;
+    const days     = allocData.filesFound;
+    const emps     = allocData.employees;
+    const labTotal = allocData.totalCost || (totalHrs * hr);
+    const src = `${days} day(s) · ${emps} employees · ERP`;
+
+    // OT/DOT calculated per-employee-per-day (>9hrs/day = OT 1.5x; Sunday/Poya = DOT 2.0x for the whole day)
+    const otb = allocData.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
+
+    $('labour-kpis').innerHTML=`
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div></div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days</div></div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>`;
+  } else {
+    // No live data — show placeholder
+    $('labour-kpis').innerHTML=`
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>`;
+  }
+
+  // Alloc chart
+  if(charts.alloc)charts.alloc.destroy();
+  const rawA=allocData?allocData.lineTotals:SD.alloc_by_line;
+  const getH=v=>typeof v==='object'?v.hours:v;
+  const a={};Object.keys(rawA).forEach(k=>{a[k]=getH(rawA[k]);});
+  const from=$('f-from').value,to=$('f-to').value;
+  const sub=allocData&&allocData.filesFound>0?`${from} to ${to} · ${allocData.filesFound} day(s) · ${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs · LKR ${Math.round(allocData.totalCost||0).toLocaleString()}`:'No Labour Allocation data — connect ERP';
+  const lines=Object.keys(a).sort((x,y)=>a[y]-a[x]);
+  const costs=lines.map(l=>Math.round(a[l]*SD.avg_blended));
+  const subEl=$('alloc-sub');if(subEl)subEl.textContent=sub;
+  const badge=$('alloc-live-badge');if(badge)badge.style.display=allocData?'':'none';
+  charts.alloc=new Chart($('allocChart').getContext('2d'),{type:'bar',data:{labels:lines,datasets:[{label:'Hours',data:lines.map(l=>a[l]),backgroundColor:'rgba(26,95,168,.25)',borderColor:'#1a5fa8',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(2)}h · Est. LKR ${costs[c.dataIndex].toLocaleString()}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068',maxRotation:35}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'h'}}}}});
+
+  // Hrs variance
+  if(charts.hrs)charts.hrs.destroy();
+  const lt=SD.line_totals,hlines=Object.keys(lt).filter(k=>lt[k].planned_hrs>0).sort((a,b)=>(lt[b].actual_hrs-lt[b].planned_hrs)-(lt[a].actual_hrs-lt[a].planned_hrs));
+  const vp=hlines.map(l=>lt[l].planned_hrs>0?((lt[l].actual_hrs-lt[l].planned_hrs)/lt[l].planned_hrs*100):0);
+  charts.hrs=new Chart($('hrsChart').getContext('2d'),{type:'bar',data:{labels:hlines,datasets:[{label:'Hrs Var %',data:vp,backgroundColor:vp.map(v=>v>15?'rgba(192,57,43,.55)':v>5?'rgba(160,94,0,.55)':v<-5?'rgba(26,122,60,.55)':'rgba(26,95,168,.35)'),borderWidth:0,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x>=0?'+':''}${c.parsed.x.toFixed(1)}% vs plan`}}},scales:{x:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'%'},min:-50,max:100},y:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068'}}}}});
+
+  // Live alloc table
+  const sec=$('live-alloc-section');
+  if(sec&&allocData&&allocData.filesFound>0){
+    sec.style.display='';
+    const lt2=allocData.lineTotals||{};
+    const lines2=Object.keys(lt2).sort((a,b)=>getH(lt2[b])-getH(lt2[a]));
+    const tH=lines2.reduce((s,l)=>s+getH(lt2[l]),0);
+    const tC=allocData.totalCost||Math.round(tH*SD.avg_blended);
+    const dl=allocData.filesFound===1?'1 day':`${allocData.filesFound} days`;
+    const subEl2=$('alloc-table-sub');if(subEl2)subEl2.textContent=`${from} to ${to} · ${dl} · ${allocData.employees} employees · ${tH.toFixed(2)} hrs`;
+    $('live-alloc-tbody').innerHTML=lines2.map(line=>{const h=getH(lt2[line]),cost=Math.round(h*SD.avg_blended),p=tH>0?(h/tH*100).toFixed(1):0;return`<tr><td style="text-align:left;font-weight:600;color:var(--blue)">${line}</td><td style="text-align:right;font-weight:700">${h.toFixed(2)}</td><td style="text-align:right">${p}%</td><td style="text-align:right;font-weight:700;color:var(--green)">${fmtF(cost)}</td></tr>`;}).join('');
+    $('live-alloc-total').innerHTML=`<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border2)"><td style="text-align:left">TOTAL — ${dl}</td><td style="text-align:right">${tH.toFixed(2)}</td><td style="text-align:right">100%</td><td style="text-align:right;color:var(--blue)">${fmtF(tC)}</td></tr>`;
+  }else if(sec)sec.style.display='none';
+}
+
+// ── RENDER MAINTENANCE SECTION ────────────────────────────────────────────────
+function renderMaintenance(c){
+  // Type cards
+  $('maint-type-cards').innerHTML=`
+    <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div></div>
+    <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div></div>
+    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub">${c.maintBreakdown>c.maintPreventive?'⚠ Breakdown > Preventive':'✓ PM ratio healthy'}</div></div>`;
+
+  if(engData.length===0){
+    if(charts.maintLine)charts.maintLine.destroy();
+    if(charts.maintType)charts.maintType.destroy();
+    $('maint-table-card').style.display='none';
+    return;
+  }
+
+  // Line chart
+  const lineAgg={};
+  engData.forEach(r=>{const l=r['line__area']||r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
+  const mLines=Object.keys(lineAgg).sort((a,b)=>lineAgg[b]-lineAgg[a]);
+  if(charts.maintLine)charts.maintLine.destroy();
+  charts.maintLine=new Chart($('maintLineChart').getContext('2d'),{type:'bar',data:{labels:mLines,datasets:[{label:'Cost (LKR)',data:mLines.map(l=>lineAgg[l]),backgroundColor:'rgba(192,57,43,.25)',borderColor:'#c0392b',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'LKR '+Math.round(c.parsed.x).toLocaleString()}}},scales:{x:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>'LKR '+(v/1000).toFixed(0)+'K'}},y:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068'}}}}});
+
+  // Type donut
+  const typeData=[c.maintFactory,c.maintMachinery].filter(v=>v>0);
+  const typeLabels=['Factory Maint.','Machinery Maint.'].filter((_,i)=>[c.maintFactory,c.maintMachinery][i]>0);
+  if(charts.maintType)charts.maintType.destroy();
+  if(typeData.length){
+    charts.maintType=new Chart($('maintTypeChart').getContext('2d'),{type:'doughnut',data:{labels:typeLabels,datasets:[{data:typeData,backgroundColor:['#c0392b','#e74c3c'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:true,cutout:'55%',plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:8}},tooltip:{callbacks:{label:c=>`${c.label}: ${fmt(c.parsed)}`}}}}});
+  }
+
+  // Detail table
+  $('maint-table-card').style.display='';
+  $('maint-table-sub').textContent=`${engData.length} entries · Total: ${fmt(c.maintCost)}`;
+  $('maint-tbody').innerHTML=engData.map(r=>{
+    const amt=parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
+    return`<tr><td style="text-align:left">${r['date']||'–'}</td><td style="text-align:left">${r['line__area']||r['line_area']||r['line___area']||'–'}</td><td style="text-align:left">${r['cost_type']||'–'}</td><td style="text-align:left">${r['sub_type']||'–'}</td><td style="font-weight:700">${fmtF(amt)}</td><td style="text-align:left">${r['supplier___vendor']||r['supplier']||'–'}</td><td style="text-align:left;color:var(--text2)">${r['description___notes']||r['description']||'–'}</td></tr>`;
+  }).join('');
+  $('maint-tfoot').innerHTML=`<tr><td colspan="4" style="text-align:left;font-weight:700">TOTAL</td><td style="font-weight:700;text-align:right">${fmtF(c.maintCost)}</td><td colspan="2"></td></tr>`;
+}
+
+// ── RENDER ELECTRICITY SECTION ────────────────────────────────────────────────
+function renderElectricity(c){
+  // Area meters
+  const areaAgg={};
+  elecDaily.forEach(r=>{
+    const area=r['factory_area']||r['area']||'Unknown';
+    const kwh=parseFloat(r['kwh_consumed']||0)||0;
+    const cost=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
+    const kg=parseFloat(r['production_output_kg']||0)||0;
+    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
+    areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
+  });
+
+  const areas=Object.keys(areaAgg);
+  $('elec-meters').innerHTML=areas.length>0?areas.map(a=>{
+    const d=areaAgg[a];
+    const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'–';
+    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
+  }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
+
+  // Daily KWh trend
+  if(charts.elecTrend)charts.elecTrend.destroy();
+  if(elecDaily.length>0){
+    const dateAgg={};
+    elecDaily.forEach(r=>{const d=r['date']||'';const kwh=parseFloat(r['kwh_consumed']||0)||0;if(!dateAgg[d])dateAgg[d]=0;dateAgg[d]+=kwh;});
+    const eDates=Object.keys(dateAgg).sort();
+    charts.elecTrend=new Chart($('elecTrendChart').getContext('2d'),{type:'line',data:{labels:eDates.map(d=>d.slice(5)),datasets:[{label:'KWh',data:eDates.map(d=>dateAgg[d]),borderColor:'#e8a000',backgroundColor:'rgba(232,163,25,.1)',fill:true,tension:.35,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(1)+' KWh'}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#8b92a5',maxTicksLimit:12}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+' KWh'}}}}});
+  }
+
+  // Monthly bill tracker
+  const billEl=$('bill-tracker');
+  if(elecBill.length>0){
+    const sortedBills=[...elecBill].filter(r=>r['month']&&r['year']);
+    billEl.innerHTML=`
+      <div style="display:flex;padding:6px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text3);">
+        <span style="min-width:80px">Month</span><span style="min-width:80px;text-align:right">Units KWh</span><span style="min-width:80px;text-align:right">Rate/KWh</span><span style="min-width:100px;text-align:right">Bill (LKR)</span>
+      </div>
+      ${sortedBills.map((r,i)=>{
+        const cleanNum=v=>parseFloat(String(v||'0').replace(/[^0-9.]/g,''))||0;
+        const amt=cleanNum(r['total_bill_lkr']);
+        const kwh=cleanNum(r['total_units_kwh']);
+        const rate=cleanNum(r['rate_per_kwh_lkr']);
+        const isCurrent=i===sortedBills.length-1;
+        return`<div class="bill-row${isCurrent?' bill-current':''}">
+          <span class="bill-month">${r['month']||''} ${r['year']||''}</span>
+          <span class="bill-kwh">${kwh.toLocaleString()}</span>
+          <span class="bill-rate">LKR ${rate.toFixed(2)}</span>
+          <span class="bill-amt">${fmt(amt)}${isCurrent?' ← Current':''}</span>
+        </div>`;
+      }).join('')}
+      <div class="bill-row" style="font-weight:700;background:var(--blue-lt)">
+        <span class="bill-month">YTD Total</span>
+        <span class="bill-kwh">${sortedBills.reduce((s,r)=>s+(parseFloat(String(r['total_units_kwh']||'0').replace(/,/g,''))||0),0).toLocaleString()}</span>
+        <span class="bill-rate">–</span>
+        <span class="bill-amt">${fmt(sortedBills.reduce((s,r)=>s+(parseFloat(String(r['total_bill_lkr']||'0').replace(/[^0-9.]/g,''))||0),0))}</span>
+      </div>`;
+  }else{
+    billEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">Connect Monthly Bill data to see tracker</div>';
+  }
+}
+
+// ── RENDER CAPEX ──────────────────────────────────────────────────────────────
+function renderCapex(){
+  if(capexData.length===0){
+    $('capex-grid').innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px">Connect Capex data to see asset register</div>';
+    return;
+  }
+  const totalCost=capexData.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalDepr=capexData.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalNBV =capexData.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
+  const active   =capexData.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
+
+  $('capex-grid').innerHTML=`
+    <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${capexData.length}</div><div class="capex-stat-sub">${active} active</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Total Capex Value</div><div class="capex-stat-val">${fmt(totalCost)}</div><div class="capex-stat-sub">Original cost</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Monthly Depreciation</div><div class="capex-stat-val">${fmt(totalDepr)}</div><div class="capex-stat-sub">Not in unit cost</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
+
+  $('capex-tbody').innerHTML=capexData.map(r=>{
+    const cost=parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
+    const depr=parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
+    const nbv =parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0;
+    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(depr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
+  }).join('');
+}
+
+function toggleCapexTable(){
+  const wrap=$('capex-table-wrap'),btn=$('capex-toggle-btn');
+  if(!wrap)return;
+  const show=wrap.style.display==='none';
+  wrap.style.display=show?'':'none';
+  btn.textContent=show?'Hide Asset Detail ▲':'Show Asset Detail ▼';
+}
+
+// ── PRODUCTION DB TABLE ───────────────────────────────────────────────────────
+function renderTable(){
+  const lt=SD.line_totals,lines=Object.keys(lt).sort((a,b)=>lt[b].actual_cost-lt[a].actual_cost);
+  let tPl=0,tAc=0,tPH=0,tAH=0,tPC=0,tAC=0;
+  const rows=lines.map(code=>{
+    const l=lt[code];tPl+=l.planned_cost;tAc+=l.actual_cost;tPH+=l.planned_hrs;tAH+=l.actual_hrs;tPC+=l.planned_cs;tAC+=l.actual_cs;
+    const v=l.actual_cost-l.planned_cost,hv=l.planned_hrs>0?((l.actual_hrs-l.planned_hrs)/l.planned_hrs*100):0;
+    const eff=l.planned_cs>0?(l.actual_cs/l.planned_cs*100).toFixed(1):'–';
+    const util=l.planned_hrs>0?Math.min((l.actual_hrs/l.planned_hrs)*100,200):0;
+    const bc=util>115?'#c0392b':util>105?'#a05e00':'#1a7a3c';
+    const stat=hv>15?'⚠ Over hrs':hv>5?'↑ Slightly over':hv<-10?'↓ Under hrs':'✓ On plan';
+    const sc=hv>15?'var(--red)':hv>5?'var(--amber)':hv<-10?'var(--blue)':'var(--green)';
+    return`<tr><td>${code}</td><td>${lname(code)}</td><td>${l.active_days}</td><td>${l.planned_hrs.toLocaleString()}</td><td>${l.actual_hrs.toLocaleString()}</td><td>${l.planned_cs.toLocaleString()}</td><td>${l.actual_cs.toLocaleString()}</td><td>${eff}%</td><td>${fmtF(l.planned_cost)}</td><td style="font-weight:700">${fmtF(l.actual_cost)}</td><td><span class="badge ${v>0?'up':'dn'}">${v>=0?'+':''}${fmt(v)}</span></td><td><div class="pb"><div class="pbt"><div class="pbf" style="width:${Math.min(util,100)}%;background:${bc}"></div></div><span class="pcp">${hv>=0?'+':''}${hv.toFixed(1)}%</span></div></td><td style="color:${sc};font-size:11px;font-weight:600">${stat}</td></tr>`;
+  });
+  const totV=tAc-tPl;
+  $('tbody').innerHTML=rows.join('');
+  $('tfoot').innerHTML=`<tr><td>TOTAL</td><td>All Lines</td><td>–</td><td>${tPH.toLocaleString()}</td><td>${tAH.toLocaleString()}</td><td>${Math.round(tPC).toLocaleString()}</td><td>${Math.round(tAC).toLocaleString()}</td><td>${(tPC>0?tAC/tPC*100:0).toFixed(1)}%</td><td>${fmtF(tPl)}</td><td>${fmtF(tAc)}</td><td><span class="badge ${totV>0?'up':'dn'}">${totV>=0?'+':''}${fmt(totV)}</span></td><td>–</td><td>–</td></tr>`;
+}
+
+// ── LINE FILTER ───────────────────────────────────────────────────────────────
+function populateLineFilter(){
+  const sel=$('f-line');
+  Object.keys(SD.line_totals).forEach(code=>{const o=document.createElement('option');o.value=code;o.textContent=`${code} — ${lname(code)}`;sel.appendChild(o);});
+}
+
+function updateTS(){const el=$('ts');if(el)el.innerHTML=`<span style="color:var(--green);margin-right:4px">●</span>Last updated: ${nowStr()} · Auto-refresh every 60s`;}
+
+// ── REFRESH ───────────────────────────────────────────────────────────────────
+let countVal=60,countTimer;
+function startCountdown(){
+  clearInterval(countTimer);countVal=300;
+  const el=$('countdown');if(el)el.textContent=countVal;
+  countTimer=setInterval(async()=>{countVal--;const el=$('countdown');if(el)el.textContent=countVal;if(countVal<=0)await autoRefresh();},1000);
+}
+async function autoRefresh(){await connectAll();renderAll();startCountdown();}
+function manualRefresh(){clearInterval(countTimer);autoRefresh();}
+function applyFilters(){if(allocData||engData.length>0)connectAll().then(()=>renderAll());else renderAll();}
+
+// ── RENDER ALL ────────────────────────────────────────────────────────────────
+function renderAll(){
+  const rows=getFiltered();
+  const from=$('f-from').value,to=$('f-to').value;
+  const c=calcCosts(from,to);
+  renderUnitCost(c);
+  renderKPIs(rows,c);
+  renderAlerts(rows,c);
+  renderTrend(rows,c);
+  renderMix(c);
+  renderLabour(c);
+  renderHourlyRates();
+  renderMaintenance(c);
+  renderElectricity(c);
+  renderCapex();
+  updateTS();
+}
+
+function init(){
+  populateLineFilter();
+  renderTable();
+  renderAll();
+  startCountdown();
+  updateStickyOffsets();
+  if(window.location.protocol==='https:'||window.location.protocol==='http:'){
+    setTimeout(connectAll,800);
+  }else{
+    const bar=$('live-bar'),bt=$('live-bar-text');
+    if(bar&&bt){bar.className='live-bar disconnected';bt.textContent='💡 Opened as local file — use Refresh button to load live data, or open from Google Drive for auto-connect.';}
+  }
+}
+
+// Keeps the sticky header/status-bar/filters stack correctly positioned even if
+// their heights change (e.g. live-bar text wraps to 2 lines on narrow screens).
+function updateStickyOffsets(){
+  const hdr = document.querySelector('.hdr');
+  const liveBar = $('live-bar');
+  const filters = document.querySelector('.filters');
+  if(!hdr || !liveBar || !filters) return;
+  const hdrH = hdr.offsetHeight;
+  liveBar.style.top = hdrH + 'px';
+  const liveBarH = liveBar.offsetHeight;
+  filters.style.top = (hdrH + liveBarH) + 'px';
+}
+window.addEventListener('resize', updateStickyOffsets);
+// Re-check shortly after data loads, since live-bar text length changes post-connect
+setTimeout(updateStickyOffsets, 1500);
+
+init();
+</script>
+</body>
+</html>
