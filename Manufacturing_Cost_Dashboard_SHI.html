@@ -71,9 +71,23 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 /* MAIN */
 .main{padding:18px 24px;max-width:1500px;margin:0 auto;}
 
-/* ALERTS */
-.alert-zone{margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;align-items:start;}
-.abar{border-radius:var(--rs);padding:10px 14px;display:flex;align-items:flex-start;gap:9px;border-left:4px solid;background:#fff;box-shadow:var(--shadow);}
+/* DASHBOARD LAYOUT — content + alert sidebar */
+.dash-layout{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;}
+.dash-content{min-width:0;}
+
+/* ALERTS — sticky right sidebar */
+.alert-sidebar{position:sticky;top:74px;background:#fff;border:1px solid var(--border);
+  border-radius:var(--r);box-shadow:var(--shadow);max-height:calc(100vh - 96px);
+  display:flex;flex-direction:column;overflow:hidden;}
+.alert-sidebar-head{padding:11px 14px;font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--text3);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.alert-count-badge{background:var(--amber-lt);color:var(--amber);font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:20px;}
+.alert-count-badge.ok{background:var(--green-lt);color:var(--green);}
+.alert-zone{overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;
+  min-height:220px;}
+.abar{border-radius:var(--rs);padding:10px 12px;display:flex;align-items:flex-start;gap:8px;border-left:4px solid;background:#fff;box-shadow:var(--shadow);}
 .abar.red{border-left-color:var(--red);background:var(--red-lt);}
 .abar.amber{border-left-color:var(--amber);background:var(--amber-lt);}
 .abar.green{border-left-color:var(--green);background:var(--green-lt);}
@@ -165,13 +179,19 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   .otgrid{grid-template-columns:repeat(3,1fr);}
   canvas{max-height:150px!important;}
   .kpi,.cc,.tcard,.otc{box-shadow:none;border:1px solid #ccc;}
+  .dash-layout{grid-template-columns:1fr;}
+  .alert-sidebar{position:static;max-height:none;box-shadow:none;border:1px solid #ccc;margin-bottom:14px;}
+  .alert-zone{overflow:visible;}
   @page{margin:12mm;size:A4 landscape;}
 }
 @media(max-width:768px){
-  .cgrid,.egrid,.otgrid,.alert-zone{grid-template-columns:1fr;}
+  .cgrid,.egrid,.otgrid{grid-template-columns:1fr;}
   .main{padding:10px 12px;}
   .hdr{padding:0 14px;}
   .filters{padding:8px 12px;}
+  .dash-layout{grid-template-columns:1fr;}
+  .alert-sidebar{position:static;max-height:none;order:-1;}
+  .alert-zone{max-height:300px;}
 }
 
 
@@ -323,9 +343,9 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 
 <!-- MAIN -->
 <div class="main">
+<div class="dash-layout">
 
-  <!-- ALERTS -->
-  <div id="alert-zone"></div>
+  <div class="dash-content">
 
   <!-- TIMESTAMP -->
   <div style="font-size:10px;color:var(--text3);margin-bottom:14px;" id="ts"></div>
@@ -532,6 +552,15 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
     </table></div>
   </div>
 
+  </div><!-- /dash-content -->
+
+  <!-- ALERTS SIDEBAR -->
+  <aside class="alert-sidebar">
+    <div class="alert-sidebar-head">⚠️ Alerts <span id="alert-count" class="alert-count-badge">0</span></div>
+    <div id="alert-zone"></div>
+  </aside>
+
+</div><!-- /dash-layout -->
 </div><!-- /main -->
 <script>
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
@@ -1478,7 +1507,13 @@ function renderAlerts(rows,c){
   }
   if(!alerts.length)
     alerts.push({t:'green',i:'✅',title:'No critical cost alerts for selected period',body:'All monitored metrics within acceptable range.'});
-  $('alert-zone').innerHTML=alerts.map(a=>`<div class="abar ${a.t}"${alerts.length===1?' style="grid-column:1/-1"':''}><span class="aicon">${a.i}</span><div><div class="atitle">${a.title}</div><div class="abody">${a.body}</div></div></div>`).join('');
+  $('alert-zone').innerHTML=alerts.map(a=>`<div class="abar ${a.t}"><span class="aicon">${a.i}</span><div><div class="atitle">${a.title}</div><div class="abody">${a.body}</div></div></div>`).join('');
+  const isAllGood = alerts.length===1 && alerts[0].t==='green';
+  const badge = $('alert-count');
+  if(badge){
+    badge.textContent = isAllGood ? '0' : alerts.length;
+    badge.className = 'alert-count-badge' + (isAllGood ? ' ok' : '');
+  }
 }
 
 // ── RENDER TREND CHART ────────────────────────────────────────────────────────
