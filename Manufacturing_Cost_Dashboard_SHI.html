@@ -910,10 +910,12 @@ async function fetchWebApp(url,from,to){
 
 // ── FILTER DATA BY DATE ───────────────────────────────────────────────────────
 function filterByDate(rows,dateCol,from,to,preferFormat){
-  // Engineering Costs, Electricity Daily, and Capex Register all use real Excel
-  // Date-type cells, which Google Sheets always exports as M/D/YYYY — so default
-  // to 'MD' here unless a caller explicitly requests day-first parsing.
-  preferFormat = preferFormat || 'MD';
+  // Engineering Costs, Electricity Daily, and Capex Register: team types dates as
+  // plain D/M/YYYY text (confirmed via unambiguous values like 19/5/2026, where
+  // 19 cannot be a month) — same day-first convention as Labour Allocation.
+  // Production DB is the one sheet confirmed to use real Excel Date-type cells
+  // exported as M/D/YYYY, and that call site passes 'MD' explicitly.
+  preferFormat = preferFormat || 'DM';
   return rows.filter(r=>{
     let d=String(r[dateCol]||'').trim();
     if(!d) return false;
@@ -1615,7 +1617,7 @@ function renderMaintenance(c){
 
   // Line chart
   const lineAgg={};
-  engData.forEach(r=>{const l=r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
+  engData.forEach(r=>{const l=r['line__area']||r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
   const mLines=Object.keys(lineAgg).sort((a,b)=>lineAgg[b]-lineAgg[a]);
   if(charts.maintLine)charts.maintLine.destroy();
   charts.maintLine=new Chart($('maintLineChart').getContext('2d'),{type:'bar',data:{labels:mLines,datasets:[{label:'Cost (LKR)',data:mLines.map(l=>lineAgg[l]),backgroundColor:'rgba(192,57,43,.25)',borderColor:'#c0392b',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'LKR '+Math.round(c.parsed.x).toLocaleString()}}},scales:{x:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>'LKR '+(v/1000).toFixed(0)+'K'}},y:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068'}}}}});
@@ -1633,7 +1635,7 @@ function renderMaintenance(c){
   $('maint-table-sub').textContent=`${engData.length} entries · Total: ${fmt(c.maintCost)}`;
   $('maint-tbody').innerHTML=engData.map(r=>{
     const amt=parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
-    return`<tr><td style="text-align:left">${r['date']||'–'}</td><td style="text-align:left">${r['line_area']||r['line___area']||'–'}</td><td style="text-align:left">${r['cost_type']||'–'}</td><td style="text-align:left">${r['sub_type']||'–'}</td><td style="font-weight:700">${fmtF(amt)}</td><td style="text-align:left">${r['supplier___vendor']||r['supplier']||'–'}</td><td style="text-align:left;color:var(--text2)">${r['description___notes']||r['description']||'–'}</td></tr>`;
+    return`<tr><td style="text-align:left">${r['date']||'–'}</td><td style="text-align:left">${r['line__area']||r['line_area']||r['line___area']||'–'}</td><td style="text-align:left">${r['cost_type']||'–'}</td><td style="text-align:left">${r['sub_type']||'–'}</td><td style="font-weight:700">${fmtF(amt)}</td><td style="text-align:left">${r['supplier___vendor']||r['supplier']||'–'}</td><td style="text-align:left;color:var(--text2)">${r['description___notes']||r['description']||'–'}</td></tr>`;
   }).join('');
   $('maint-tfoot').innerHTML=`<tr><td colspan="4" style="text-align:left;font-weight:700">TOTAL</td><td style="font-weight:700;text-align:right">${fmtF(c.maintCost)}</td><td colspan="2"></td></tr>`;
 }
@@ -1720,7 +1722,7 @@ function renderCapex(){
     const cost=parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
     const depr=parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
     const nbv =parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0;
-    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(depr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
+    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(depr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
   }).join('');
 }
 
