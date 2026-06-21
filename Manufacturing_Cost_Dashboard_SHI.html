@@ -362,6 +362,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
     <div class="cc">
       <div class="ch"><div><div class="ct">Cost Mix</div><div class="cs">% share of total cost — period</div></div></div>
       <canvas id="mixChart"></canvas>
+      <div id="mixChartEmpty" style="display:none;padding:40px;text-align:center;color:var(--text3);font-size:12px;">Connect data sources to see cost mix</div>
     </div>
   </div>
 
@@ -1491,28 +1492,70 @@ function renderTrend(rows,c){
   if(charts.trend)charts.trend.destroy();
 
   // Use live daily totals if available, otherwise fall back to embedded SD data
-  let labels, labData;
+  let labels, labDates, labData;
   if(allocData && allocData.dailyTotals && Object.keys(allocData.dailyTotals).length > 0) {
-    const dailyDates = Object.keys(allocData.dailyTotals).sort();
-    labels  = dailyDates.map(d=>d.slice(5));
-    labData = dailyDates.map(d=>allocData.dailyTotals[d].cost||0);
+    labDates = Object.keys(allocData.dailyTotals).sort();
+    labels   = labDates.map(d=>d.slice(5));
+    labData  = labDates.map(d=>allocData.dailyTotals[d].cost||0);
   } else if(rows.length > 0) {
-    labels  = rows.map(d=>d.date.slice(5));
-    labData = rows.map(d=>d.ac);
+    labDates = rows.map(d=>d.date);
+    labels   = rows.map(d=>d.date.slice(5));
+    labData  = rows.map(d=>d.ac);
   } else {
     // No data for selected range
-    labels  = [];
-    labData = [];
+    labDates = [];
+    labels   = [];
+    labData  = [];
   }
-  const n=Math.max(labels.length,1);
-  const maintPerDay=c.maintCost/n, elecPerDay=c.elecCost/n;
+
+  // Build REAL per-day Maintenance totals from engData (date + amount_lkr), keyed
+  // to the same date labels used for Labour — instead of spreading the period
+  // total evenly across days, which misrepresents which days actually had cost.
+  const maintByDate = {};
+  engData.forEach(r=>{
+    const d = normaliseDate(String(r['date']||'').trim());
+    const amt = parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/,/g,''))||0;
+    if(!d) return;
+    maintByDate[d] = (maintByDate[d]||0) + amt;
+  });
+
+  // Build REAL per-day Electricity totals from elecDaily (date + est_cost_lkr,
+  // falling back to kwh × latest bill rate when est_cost_lkr isn't populated —
+  // same fallback logic used for the period-total elecCost KPI).
+  let fallbackRate = 0;
+  if(elecBill.length>0){
+    const lastBill = elecBill[elecBill.length-1];
+    fallbackRate = parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
+  }
+  const elecByDate = {};
+  elecDaily.forEach(r=>{
+    const d = normaliseDate(String(r['date']||'').trim());
+    if(!d) return;
+    const kwh = parseFloat(r['kwh_consumed']||0)||0;
+    let cost = parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
+    if(cost===0 && kwh>0 && fallbackRate>0) cost = kwh*fallbackRate;
+    elecByDate[d] = (elecByDate[d]||0) + cost;
+  });
+
+  const maintData = labDates.map(d=>Math.round(maintByDate[d]||0));
+  const elecData  = labDates.map(d=>Math.round(elecByDate[d]||0));
+
+  console.log('TREND-DEBUG engData.length:', engData.length);
+  console.log('TREND-DEBUG engData sample (first 3):', JSON.stringify(engData.slice(0,3)));
+  console.log('TREND-DEBUG maintByDate:', JSON.stringify(maintByDate));
+  console.log('TREND-DEBUG labDates:', JSON.stringify(labDates));
+  console.log('TREND-DEBUG maintData (final array fed to chart):', JSON.stringify(maintData));
+  console.log('TREND-DEBUG elecDaily.length:', elecDaily.length);
+  console.log('TREND-DEBUG elecByDate:', JSON.stringify(elecByDate));
+  console.log('TREND-DEBUG elecData (final array fed to chart):', JSON.stringify(elecData));
+
   const trendCanvas=$('trendChart');if(!trendCanvas)return;
   charts.trend=new Chart(trendCanvas.getContext('2d'),{
     type:'bar',
     data:{labels,datasets:[
       {label:'Labour',data:labData,backgroundColor:'rgba(26,95,168,.7)',stack:'s'},
-      {label:'Maintenance',data:rows.map(()=>maintPerDay),backgroundColor:'rgba(192,57,43,.65)',stack:'s'},
-      {label:'Electricity',data:rows.map(()=>elecPerDay),backgroundColor:'rgba(232,163,25,.65)',stack:'s'},
+      {label:'Maintenance',data:maintData,backgroundColor:'rgba(192,57,43,.65)',stack:'s'},
+      {label:'Electricity',data:elecData,backgroundColor:'rgba(232,163,25,.65)',stack:'s'},
     ]},
     options:{responsive:true,maintainAspectRatio:true,
       plugins:{legend:{labels:{font:{size:9},padding:8,boxWidth:10}},tooltip:{mode:'index',intersect:false,callbacks:{label:c=>c.dataset.label+': LKR '+Math.round(c.parsed.y).toLocaleString()}}},
@@ -1528,10 +1571,14 @@ function renderMix(c){
   const lbls=['Labour','Maintenance','Electricity'].filter((_,i)=>[c.labourCost,c.maintCost,c.elecCost][i]>0);
   const cols=['#1a5fa8','#c0392b','#e8a000'];
   const mixCanvas = $('mixChart');
+  const mixEmpty  = $('mixChartEmpty');
   if(!data.length||!mixCanvas){
-    if(mixCanvas&&mixCanvas.closest('.cc'))mixCanvas.closest('.cc').innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px;">Connect data sources to see cost mix</div>';
+    if(mixCanvas) mixCanvas.style.display='none';
+    if(mixEmpty)  mixEmpty.style.display='block';
     return;
   }
+  if(mixCanvas) mixCanvas.style.display='block';
+  if(mixEmpty)  mixEmpty.style.display='none';
   charts.mix=new Chart(mixCanvas.getContext('2d'),{
     type:'doughnut',
     data:{labels:lbls,datasets:[{data,backgroundColor:cols.slice(0,data.length),borderWidth:2,borderColor:'#fff'}]},
