@@ -104,8 +104,8 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .abar.blue .atitle{color:var(--blue);}
 
 /* KPIs */
-.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:13px;margin-bottom:18px;}
-.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:15px 17px;box-shadow:var(--shadow);border-top:3px solid;}
+.kgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px;}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;box-shadow:var(--shadow);border-top:3px solid;}
 .kpi.gold{border-top-color:var(--gold);}
 .kpi.blue{border-top-color:var(--blue);}
 .kpi.green{border-top-color:var(--green);}
@@ -113,9 +113,9 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .kpi.teal{border-top-color:var(--teal);}
 .kpi.purple{border-top-color:var(--purple);}
 .kpi.amber{border-top-color:var(--amber);}
-.klbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.7px;margin-bottom:7px;}
-.kval{font-size:23px;font-weight:700;color:var(--text);letter-spacing:-.5px;line-height:1;}
-.ksub{font-size:11px;color:var(--text3);margin-top:5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.klbl{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px;}
+.kval{font-size:19px;font-weight:700;color:var(--text);letter-spacing:-.5px;line-height:1;}
+.ksub{font-size:10px;color:var(--text3);margin-top:4px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
 .badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;}
 .badge.up{background:#fde8e6;color:var(--red);}
 .badge.dn{background:var(--green-lt);color:var(--green);}
@@ -189,6 +189,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 }
 @media(max-width:768px){
   .cgrid,.egrid,.otgrid{grid-template-columns:1fr;}
+  .kgrid{grid-template-columns:repeat(2,1fr);}
   .main{padding:10px 12px;}
   .hdr{padding:0 14px;}
   .filters{padding:8px 12px;}
@@ -353,23 +354,12 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <!-- TIMESTAMP -->
   <div style="font-size:10px;color:var(--text3);margin-bottom:14px;" id="ts"></div>
 
-  <!-- ── TOTAL COST SUMMARY ───────────────────────────────────────────────── -->
-  <div class="unit-cost-card" id="unit-cost-card">
-    <div class="unit-cost-title">📊 Total Manufacturing Cost per kg — Selected Period</div>
-    <div class="unit-cost-breakdown" id="unit-cost-breakdown">
-      <div class="ucb-item"><div class="ucb-label">Labour Cost / kg</div><div class="ucb-val ucb-labour" id="uc-labour">–</div><div class="ucb-pct" id="uc-labour-pct">Connect to calculate</div></div>
-      <div class="ucb-item"><div class="ucb-label">Maintenance Cost / kg</div><div class="ucb-val ucb-maint" id="uc-maint">–</div><div class="ucb-pct" id="uc-maint-pct">Connect to calculate</div></div>
-      <div class="ucb-item"><div class="ucb-label">Electricity Cost / kg</div><div class="ucb-val ucb-elec" id="uc-elec">–</div><div class="ucb-pct" id="uc-elec-pct">Connect to calculate</div></div>
-      <div class="ucb-item"><div class="ucb-label">TOTAL COST / kg</div><div class="ucb-val ucb-total" id="uc-total">–</div><div class="ucb-pct" id="uc-total-sub">Labour + Maintenance + Electricity</div></div>
-    </div>
-  </div>
-
   <!-- ── KPI CARDS ────────────────────────────────────────────────────────── -->
-  <div class="section-title">Key Performance Indicators <span class="section-tag tag-total">Period Totals</span></div>
+  <div class="section-title" style="margin:10px 0 10px;">Key Performance Indicators <span class="section-tag tag-total">Period Totals</span></div>
   <div class="kgrid" id="kgrid"></div>
 
   <!-- ── COST TREND ───────────────────────────────────────────────────────── -->
-  <div class="section-title">Cost Trend <span class="section-tag tag-total">Stacked Daily</span></div>
+  <div class="section-title" style="margin:10px 0 10px;">Cost Trend <span class="section-tag tag-total">Stacked Daily</span></div>
   <div class="cgrid">
     <div class="cc">
       <div class="ch">
@@ -1448,17 +1438,8 @@ function calcCosts(from,to){
 }
 
 // ── RENDER UNIT COST SUMMARY ──────────────────────────────────────────────────
-function renderUnitCost(c){
-  $('uc-labour').textContent = fmtKg(c.labPerKg);
-  $('uc-maint').textContent  = fmtKg(c.maintPerKg);
-  $('uc-elec').textContent   = fmtKg(c.elecPerKg);
-  $('uc-total').textContent  = fmtKg(c.totalPerKg);
-  const tot=c.totalCost||1;
-  $('uc-labour-pct').textContent = c.labourCost>0?`${(c.labourCost/tot*100).toFixed(1)}% of total cost`:'Connect Labour source';
-  $('uc-maint-pct').textContent  = c.maintCost>0?`${(c.maintCost/tot*100).toFixed(1)}% of total cost`:'No maintenance data yet';
-  $('uc-elec-pct').textContent   = c.elecCost>0?`${(c.elecCost/tot*100).toFixed(1)}% of total cost`:'No electricity data yet';
-  $('uc-total-sub').textContent  = c.totalKg>0?`Based on ${Math.round(c.totalKg).toLocaleString()} kg produced`:'kg data from Production DB';
-}
+// (unit-cost-card removed from layout; per-kg figures shown in KPI card badges)
+function renderUnitCost(c){ /* no-op */ }
 
 // ── RENDER KPIs ───────────────────────────────────────────────────────────────
 function renderKPIs(rows,c){
