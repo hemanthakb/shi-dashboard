@@ -860,9 +860,9 @@ async function fetchCSV(url){
   try{
     const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const fetchUrl = isLocal ? 'https://corsproxy.io/?' + encodeURIComponent(url + '&t=' + Date.now()) : url + '&t=' + Date.now();
-    // 15 second timeout per source
+    // 8 second timeout per source
     const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(), 15000);
+    const timeout = setTimeout(()=>controller.abort(), 8000);
     const r=await fetch(fetchUrl,{cache:'no-store', signal:controller.signal});
     clearTimeout(timeout);
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -1949,11 +1949,12 @@ function init(){
   renderAll();
   startCountdown();
   updateStickyOffsets();
-  if(window.location.protocol==='https:'||window.location.protocol==='http:'){
-    setTimeout(connectAll,800);
-  }else{
-    const bar=$('live-bar'),bt=$('live-bar-text');
-    if(bar&&bt){bar.className='live-bar disconnected';bt.textContent='💡 Opened as local file — use Refresh button to load live data, or open from Google Drive for auto-connect.';}
+  // Never auto-connect on load — always require manual button press.
+  // This prevents the page hanging/lagging on open regardless of protocol.
+  const bar=$('live-bar'),bt=$('live-bar-text');
+  if(bar&&bt){
+    bar.className='live-bar disconnected';
+    bt.textContent='💡 Dashboard ready — press Connect / Refresh to load live data from Google Sheets.';
   }
 }
 
