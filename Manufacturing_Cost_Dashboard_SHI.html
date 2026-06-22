@@ -986,7 +986,33 @@ function normaliseDate(d, preferFormat){
   if(m2) return m2[3]+'-'+m2[2].padStart(2,'0')+'-'+m2[1].padStart(2,'0');
   return d;
 }
-function getFiltered(){const from=$('f-from').value,to=$('f-to').value;return SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);}
+// Batch line codes excluded from CS volume (per project rules)
+const BATCH_LINE_CODES = new Set(['DPML','LBML','CRWL','PRL','FGL','PCL']);
+
+function getFiltered(){
+  const from=$('f-from').value, to=$('f-to').value;
+
+  // If live Production DB data is loaded, build rows from it
+  if(prodData && prodData.length > 0){
+    const sf = v => { try{ return parseFloat(String(v).replace(/,/g,''))||0; }catch(e){ return 0; }};
+    const dayMap = {};
+    prodData.forEach(r => {
+      const d = r.date;
+      if(!d || d < from || d > to) return;
+      // Exclude batch lines from CS volume
+      if(BATCH_LINE_CODES.has(r.line)) return;
+      if(!dayMap[d]) dayMap[d] = {date:d, pc:0, ac:0, pcs_p:0, pcs_a:0, kg_a:0};
+      dayMap[d].pcs_p += sf(r.planned_out_put_cs);
+      dayMap[d].pcs_a += sf(r.actual_out_put_cs);
+      dayMap[d].kg_a  += sf(r.actual_out_put_kg);
+    });
+    const liveRows = Object.values(dayMap).sort((a,b)=>a.date.localeCompare(b.date));
+    if(liveRows.length > 0) return liveRows;
+  }
+
+  // Fallback to embedded historical data
+  return SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
+}
 
 // ── CONNECT ALL ───────────────────────────────────────────────────────────────
 let connectRequestId = 0;
