@@ -327,7 +327,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <div class="fsep"></div>
   <div class="fg">
     <span class="flbl">Production Line</span>
-    <select id="f-line"><option value="all">All Lines</option></select>
+    <select id="f-line" onchange="applyFilters()"><option value="all">All Lines</option></select>
   </div>
   <div class="fg">
     <span class="flbl">Cost Stream</span>
@@ -989,6 +989,38 @@ function normaliseDate(d, preferFormat){
 // ── LINE FILTER HELPER ────────────────────────────────────────────────────────
 function getLineFilter(){ return ($('f-line')||{value:'all'}).value || 'all'; }
 
+// ── LINE-FILTERED DATA HELPERS ────────────────────────────────────────────────
+// Maintenance rows filtered to selected line (matches line_area field)
+function getFilteredEng(){
+  const lf = getLineFilter();
+  if(lf === 'all') return engData;
+  const name = (LM[lf]||lf).toLowerCase();
+  return engData.filter(r=>{
+    const area = String(r['line__area']||r['line_area']||r['line___area']||'').toLowerCase();
+    return area.includes(name) || area.includes(lf.toLowerCase());
+  });
+}
+// Electricity rows filtered to selected line (matches factory_area field)
+function getFilteredElec(){
+  const lf = getLineFilter();
+  if(lf === 'all') return elecDaily;
+  const name = (LM[lf]||lf).toLowerCase();
+  return elecDaily.filter(r=>{
+    const area = String(r['factory_area']||r['area']||'').toLowerCase();
+    return area.includes(name) || area.includes(lf.toLowerCase());
+  });
+}
+// Capex rows filtered to selected line
+function getFilteredCapex(){
+  const lf = getLineFilter();
+  if(lf === 'all') return capexData;
+  const name = (LM[lf]||lf).toLowerCase();
+  return capexData.filter(r=>{
+    const area = String(r['line__area']||r['line___area']||r['line_area']||'').toLowerCase();
+    return area.includes(name) || area.includes(lf.toLowerCase());
+  });
+}
+
 // Batch line codes excluded from CS volume (per project rules)
 const BATCH_LINE_CODES = new Set(['DPML','LBML','CRWL','PRL','FGL','PCL']);
 
@@ -1433,13 +1465,8 @@ function calcCosts(from,to){
   const blendedHr  = (prodSources.rates&&prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
   const labourCost = allocData&&allocData.filesFound>0 ? allocData.totalCost : (labourHrs * blendedHr);
 
-  // Maintenance (sum Amount column for date range — filtered by line if selected)
-  const maintFilter = getLineFilter();
-  const maintData = maintFilter === 'all' ? engData : engData.filter(r => {
-    const area = String(r['line__area']||r['line_area']||r['line___area']||'').toLowerCase();
-    const lineName = (LM[maintFilter]||maintFilter).toLowerCase();
-    return area.includes(lineName) || area.includes(maintFilter.toLowerCase());
-  });
+  // Maintenance (filtered by line)
+  const maintData = getFilteredEng();
   let maintCost=0, maintFactory=0, maintMachinery=0, maintPreventive=0, maintBreakdown=0;
   maintData.forEach(r=>{
     const amt=parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
@@ -1452,29 +1479,24 @@ function calcCosts(from,to){
     if(st.includes('break')||st.includes('correct'))maintBreakdown+=amt;
   });
 
-  // Electricity (filtered by line/area if selected)
-  const elecFilter = getLineFilter();
-  const elecData = elecFilter === 'all' ? elecDaily : elecDaily.filter(r => {
-    const area = String(r['factory_area']||r['area']||'').toLowerCase();
-    const lineName = (LM[elecFilter]||elecFilter).toLowerCase();
-    return area.includes(lineName) || area.includes(elecFilter.toLowerCase());
-  });
+  // Electricity (filtered by line)
+  const elecData = getFilteredElec();
   let elecKwh=0, elecCost=0;
   elecData.forEach(r=>{
     elecKwh+=parseFloat(r['kwh_consumed']||0)||0;
     elecCost+=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
   });
   // If no cost calculated, derive from bill rate
-  if(elecCost===0&&elecKwh>0&&elecBill.length>0&&elecFilter==='all'){
+  if(elecCost===0&&elecKwh>0&&elecBill.length>0&&getLineFilter()==='all'){
     const lastBill=elecBill[elecBill.length-1];
     const rate=parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
     if(rate>0)elecCost=elecKwh*rate;
   }
 
   // Total kg — use live production DB if available, else embedded historical data
-  const rows = SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
-  const totalKg = prod && prod.totalKg > 0 ? prod.totalKg : rows.reduce((s,d)=>s+(d.kg_a||0),0);
-  const totalCS = prod && prod.totalCS > 0 ? prod.totalCS : rows.reduce((s,d)=>s+(d.pcs_a||0),0);
+  const sdRows = SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
+  const totalKg = prod && prod.totalKg > 0 ? prod.totalKg : sdRows.reduce((s,d)=>s+(d.kg_a||0),0);
+  const totalCS = prod && prod.totalCS > 0 ? prod.totalCS : sdRows.reduce((s,d)=>s+(d.pcs_a||0),0);
 
   return{labourCost,labourHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,
     totalCost:labourCost+maintCost+elecCost,
@@ -1573,7 +1595,7 @@ function renderTrend(rows,c){
   // to the same date labels used for Labour — instead of spreading the period
   // total evenly across days, which misrepresents which days actually had cost.
   const maintByDate = {};
-  engData.forEach(r=>{
+  getFilteredEng().forEach(r=>{
     const d = normaliseDate(String(r['date']||'').trim());
     const amt = parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/,/g,''))||0;
     if(!d) return;
@@ -1589,7 +1611,7 @@ function renderTrend(rows,c){
     fallbackRate = parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
   }
   const elecByDate = {};
-  elecDaily.forEach(r=>{
+  getFilteredElec().forEach(r=>{
     const d = normaliseDate(String(r['date']||'').trim());
     if(!d) return;
     const kwh = parseFloat(r['kwh_consumed']||0)||0;
@@ -1713,7 +1735,7 @@ function renderMaintenance(c){
     <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div></div>
     <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub">${c.maintBreakdown>c.maintPreventive?'⚠ Breakdown > Preventive':'✓ PM ratio healthy'}</div></div>`;
 
-  if(engData.length===0){
+  if(filteredEngData.length===0){
     if(charts.maintLine)charts.maintLine.destroy();
     if(charts.maintType)charts.maintType.destroy();
     $('maint-table-card').style.display='none';
@@ -1722,12 +1744,7 @@ function renderMaintenance(c){
 
   // Line chart
   const lineAgg={};
-  const maintLineFilter = getLineFilter();
-  const filteredEngData = maintLineFilter === 'all' ? engData : engData.filter(r => {
-    const area = String(r['line__area']||r['line_area']||r['line___area']||'').toLowerCase();
-    const lineName = (LM[maintLineFilter]||maintLineFilter).toLowerCase();
-    return area.includes(lineName) || area.includes(maintLineFilter.toLowerCase());
-  });
+  const filteredEngData = getFilteredEng();
   filteredEngData.forEach(r=>{const l=r['line__area']||r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
   const mLines=Object.keys(lineAgg).sort((a,b)=>lineAgg[b]-lineAgg[a]);
   if(charts.maintLine)charts.maintLine.destroy();
@@ -1755,12 +1772,7 @@ function renderMaintenance(c){
 function renderElectricity(c){
   // Area meters
   const areaAgg={};
-  const elecLineFilter = getLineFilter();
-  const filteredElecData = elecLineFilter === 'all' ? elecDaily : elecDaily.filter(r => {
-    const area = String(r['factory_area']||r['area']||'').toLowerCase();
-    const lineName = (LM[elecLineFilter]||elecLineFilter).toLowerCase();
-    return area.includes(lineName) || area.includes(elecLineFilter.toLowerCase());
-  });
+  const filteredElecData = getFilteredElec();
   filteredElecData.forEach(r=>{
     const area=r['factory_area']||r['area']||'Unknown';
     const kwh=parseFloat(r['kwh_consumed']||0)||0;
@@ -1779,7 +1791,7 @@ function renderElectricity(c){
 
   // Daily KWh trend
   if(charts.elecTrend)charts.elecTrend.destroy();
-  if(filteredElecData.length>0){
+  if(filteredElecData.length > 0){
     const dateAgg={};
     filteredElecData.forEach(r=>{const d=r['date']||'';const kwh=parseFloat(r['kwh_consumed']||0)||0;if(!dateAgg[d])dateAgg[d]=0;dateAgg[d]+=kwh;});
     const eDates=Object.keys(dateAgg).sort();
@@ -1824,12 +1836,7 @@ function renderCapex(){
     $('capex-grid').innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px">Connect Capex data to see asset register</div>';
     return;
   }
-  const capexLineFilter = getLineFilter();
-  const filteredCapex = capexLineFilter === 'all' ? capexData : capexData.filter(r => {
-    const area = String(r['line__area']||r['line___area']||r['line_area']||'').toLowerCase();
-    const lineName = (LM[capexLineFilter]||capexLineFilter).toLowerCase();
-    return area.includes(lineName) || area.includes(capexLineFilter.toLowerCase());
-  });
+  const filteredCapex = getFilteredCapex();
   const totalCost=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
   const totalDepr=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
   const totalNBV =filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
@@ -1879,6 +1886,7 @@ function renderTable(){
 // ── LINE FILTER ───────────────────────────────────────────────────────────────
 function populateLineFilter(){
   const sel=$('f-line');
+  const prev=sel.value; // save current selection before rebuilding
   // Clear all except first "All Lines" option
   while(sel.options.length > 1) sel.remove(1);
   // Use live prodData lines if available, else fall back to SD.line_totals
@@ -1886,6 +1894,8 @@ function populateLineFilter(){
     ? [...new Set(prodData.map(r=>r.line).filter(l=>l&&!/^(DAY|OEE)$/.test(l)))].sort()
     : Object.keys(SD.line_totals);
   lineCodes.forEach(code=>{const o=document.createElement('option');o.value=code;o.textContent=`${code} — ${lname(code)}`;sel.appendChild(o);});
+  // Restore previous selection if it still exists in the new list
+  if(prev && prev !== 'all' && lineCodes.includes(prev)) sel.value=prev;
 }
 
 function updateTS(){const el=$('ts');if(el)el.innerHTML=`<span style="color:var(--green);margin-right:4px">●</span>Last updated: ${nowStr()} · Auto-refresh every 60s`;}
@@ -1899,7 +1909,21 @@ function startCountdown(){
 }
 async function autoRefresh(){await connectAll();renderAll();startCountdown();}
 function manualRefresh(){clearInterval(countTimer);autoRefresh();}
-function applyFilters(){if(allocData||engData.length>0)connectAll().then(()=>renderAll());else renderAll();}
+function applyFilters(){
+  // If line filter is the only thing changing, just re-render (no re-fetch needed)
+  // If date range changed and we have live data, re-fetch first
+  const lineChanged = applyFilters._lastLine !== getLineFilter();
+  const fromChanged = applyFilters._lastFrom !== $('f-from').value;
+  const toChanged   = applyFilters._lastTo   !== $('f-to').value;
+  applyFilters._lastLine = getLineFilter();
+  applyFilters._lastFrom = $('f-from').value;
+  applyFilters._lastTo   = $('f-to').value;
+  if((fromChanged||toChanged) && (allocData||engData.length>0)){
+    connectAll().then(()=>renderAll());
+  } else {
+    renderAll();
+  }
+}
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll(){
