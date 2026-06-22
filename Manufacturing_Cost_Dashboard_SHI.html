@@ -986,6 +986,9 @@ function normaliseDate(d, preferFormat){
   if(m2) return m2[3]+'-'+m2[2].padStart(2,'0')+'-'+m2[1].padStart(2,'0');
   return d;
 }
+// ── LINE FILTER HELPER ────────────────────────────────────────────────────────
+function getLineFilter(){ return ($('f-line')||{value:'all'}).value || 'all'; }
+
 // Batch line codes excluded from CS volume (per project rules)
 const BATCH_LINE_CODES = new Set(['DPML','LBML','CRWL','PRL','FGL','PCL']);
 
@@ -996,11 +999,14 @@ function getFiltered(){
   if(prodData && prodData.length > 0){
     const sf = v => { try{ return parseFloat(String(v).replace(/,/g,''))||0; }catch(e){ return 0; }};
     const dayMap = {};
+    const lineFilter = getLineFilter();
     prodData.forEach(r => {
       const d = r.date;
       if(!d || d < from || d > to) return;
       // Exclude batch lines from CS volume
       if(BATCH_LINE_CODES.has(r.line)) return;
+      // Apply production line filter
+      if(lineFilter !== 'all' && r.line !== lineFilter) return;
       if(!dayMap[d]) dayMap[d] = {date:d, pc:0, ac:0, pcs_p:0, pcs_a:0, kg_a:0};
       dayMap[d].pcs_p += sf(r.planned_out_put_cs);
       dayMap[d].pcs_a += sf(r.actual_out_put_cs);
@@ -1097,6 +1103,8 @@ async function connectAll(){
     prodData = [];
   }
   if(srcRows.length>0) parseProdSources(srcRows);
+  // Refresh line filter dropdown with live line codes
+  populateLineFilter();
 
   // Build status
   const parts=[];
@@ -1172,6 +1180,7 @@ function getProdActuals(from, to) {
   const lineAgg = {}, dailyAgg = {}, productAgg = {};
   let totalKg = 0, totalCS = 0, totalRunHrs = 0, totalLabHrs = 0;
 
+  const lineFilter = getLineFilter();
   prodData.forEach(r => {
     const date    = String(r['date']||'').trim();
     const line    = String(r['line']||r['production_line']||'').trim();
@@ -1184,6 +1193,7 @@ function getProdActuals(from, to) {
     const planHrs = sf(r['planned_labour_hr']||r['planned_hrs']||r['planned_labour_hrs']||0);
 
     if(!line) return;
+    if(lineFilter !== 'all' && line !== lineFilter) return;
     const isBatch = BATCH_LINES.includes(line);
 
     // Line aggregation
@@ -1423,9 +1433,15 @@ function calcCosts(from,to){
   const blendedHr  = (prodSources.rates&&prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
   const labourCost = allocData&&allocData.filesFound>0 ? allocData.totalCost : (labourHrs * blendedHr);
 
-  // Maintenance (sum Amount column for date range)
+  // Maintenance (sum Amount column for date range — filtered by line if selected)
+  const maintFilter = getLineFilter();
+  const maintData = maintFilter === 'all' ? engData : engData.filter(r => {
+    const area = String(r['line__area']||r['line_area']||r['line___area']||'').toLowerCase();
+    const lineName = (LM[maintFilter]||maintFilter).toLowerCase();
+    return area.includes(lineName) || area.includes(maintFilter.toLowerCase());
+  });
   let maintCost=0, maintFactory=0, maintMachinery=0, maintPreventive=0, maintBreakdown=0;
-  engData.forEach(r=>{
+  maintData.forEach(r=>{
     const amt=parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
     maintCost+=amt;
     const ct=String(r['cost_type']||'').toLowerCase();
@@ -1436,14 +1452,20 @@ function calcCosts(from,to){
     if(st.includes('break')||st.includes('correct'))maintBreakdown+=amt;
   });
 
-  // Electricity
+  // Electricity (filtered by line/area if selected)
+  const elecFilter = getLineFilter();
+  const elecData = elecFilter === 'all' ? elecDaily : elecDaily.filter(r => {
+    const area = String(r['factory_area']||r['area']||'').toLowerCase();
+    const lineName = (LM[elecFilter]||elecFilter).toLowerCase();
+    return area.includes(lineName) || area.includes(elecFilter.toLowerCase());
+  });
   let elecKwh=0, elecCost=0;
-  elecDaily.forEach(r=>{
+  elecData.forEach(r=>{
     elecKwh+=parseFloat(r['kwh_consumed']||0)||0;
     elecCost+=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
   });
   // If no cost calculated, derive from bill rate
-  if(elecCost===0&&elecKwh>0&&elecBill.length>0){
+  if(elecCost===0&&elecKwh>0&&elecBill.length>0&&elecFilter==='all'){
     const lastBill=elecBill[elecBill.length-1];
     const rate=parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
     if(rate>0)elecCost=elecKwh*rate;
@@ -1700,7 +1722,13 @@ function renderMaintenance(c){
 
   // Line chart
   const lineAgg={};
-  engData.forEach(r=>{const l=r['line__area']||r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
+  const maintLineFilter = getLineFilter();
+  const filteredEngData = maintLineFilter === 'all' ? engData : engData.filter(r => {
+    const area = String(r['line__area']||r['line_area']||r['line___area']||'').toLowerCase();
+    const lineName = (LM[maintLineFilter]||maintLineFilter).toLowerCase();
+    return area.includes(lineName) || area.includes(maintLineFilter.toLowerCase());
+  });
+  filteredEngData.forEach(r=>{const l=r['line__area']||r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
   const mLines=Object.keys(lineAgg).sort((a,b)=>lineAgg[b]-lineAgg[a]);
   if(charts.maintLine)charts.maintLine.destroy();
   charts.maintLine=new Chart($('maintLineChart').getContext('2d'),{type:'bar',data:{labels:mLines,datasets:[{label:'Cost (LKR)',data:mLines.map(l=>lineAgg[l]),backgroundColor:'rgba(192,57,43,.25)',borderColor:'#c0392b',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'LKR '+Math.round(c.parsed.x).toLocaleString()}}},scales:{x:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>'LKR '+(v/1000).toFixed(0)+'K'}},y:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068'}}}}});
@@ -1715,8 +1743,8 @@ function renderMaintenance(c){
 
   // Detail table
   $('maint-table-card').style.display='';
-  $('maint-table-sub').textContent=`${engData.length} entries · Total: ${fmt(c.maintCost)}`;
-  $('maint-tbody').innerHTML=engData.map(r=>{
+  $('maint-table-sub').textContent=`${filteredEngData.length} entries · Total: ${fmt(c.maintCost)}`;
+  $('maint-tbody').innerHTML=filteredEngData.map(r=>{
     const amt=parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
     return`<tr><td style="text-align:left">${r['date']||'–'}</td><td style="text-align:left">${r['line__area']||r['line_area']||r['line___area']||'–'}</td><td style="text-align:left">${r['cost_type']||'–'}</td><td style="text-align:left">${r['sub_type']||'–'}</td><td style="font-weight:700">${fmtF(amt)}</td><td style="text-align:left">${r['supplier___vendor']||r['supplier']||'–'}</td><td style="text-align:left;color:var(--text2)">${r['description___notes']||r['description']||'–'}</td></tr>`;
   }).join('');
@@ -1727,7 +1755,13 @@ function renderMaintenance(c){
 function renderElectricity(c){
   // Area meters
   const areaAgg={};
-  elecDaily.forEach(r=>{
+  const elecLineFilter = getLineFilter();
+  const filteredElecData = elecLineFilter === 'all' ? elecDaily : elecDaily.filter(r => {
+    const area = String(r['factory_area']||r['area']||'').toLowerCase();
+    const lineName = (LM[elecLineFilter]||elecLineFilter).toLowerCase();
+    return area.includes(lineName) || area.includes(elecLineFilter.toLowerCase());
+  });
+  filteredElecData.forEach(r=>{
     const area=r['factory_area']||r['area']||'Unknown';
     const kwh=parseFloat(r['kwh_consumed']||0)||0;
     const cost=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
@@ -1745,9 +1779,9 @@ function renderElectricity(c){
 
   // Daily KWh trend
   if(charts.elecTrend)charts.elecTrend.destroy();
-  if(elecDaily.length>0){
+  if(filteredElecData.length>0){
     const dateAgg={};
-    elecDaily.forEach(r=>{const d=r['date']||'';const kwh=parseFloat(r['kwh_consumed']||0)||0;if(!dateAgg[d])dateAgg[d]=0;dateAgg[d]+=kwh;});
+    filteredElecData.forEach(r=>{const d=r['date']||'';const kwh=parseFloat(r['kwh_consumed']||0)||0;if(!dateAgg[d])dateAgg[d]=0;dateAgg[d]+=kwh;});
     const eDates=Object.keys(dateAgg).sort();
     charts.elecTrend=new Chart($('elecTrendChart').getContext('2d'),{type:'line',data:{labels:eDates.map(d=>d.slice(5)),datasets:[{label:'KWh',data:eDates.map(d=>dateAgg[d]),borderColor:'#e8a000',backgroundColor:'rgba(232,163,25,.1)',fill:true,tension:.35,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(1)+' KWh'}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#8b92a5',maxTicksLimit:12}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+' KWh'}}}}});
   }
@@ -1790,10 +1824,16 @@ function renderCapex(){
     $('capex-grid').innerHTML='<div style="color:var(--text3);font-size:12px;padding:10px">Connect Capex data to see asset register</div>';
     return;
   }
-  const totalCost=capexData.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
-  const totalDepr=capexData.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
-  const totalNBV =capexData.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
-  const active   =capexData.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
+  const capexLineFilter = getLineFilter();
+  const filteredCapex = capexLineFilter === 'all' ? capexData : capexData.filter(r => {
+    const area = String(r['line__area']||r['line___area']||r['line_area']||'').toLowerCase();
+    const lineName = (LM[capexLineFilter]||capexLineFilter).toLowerCase();
+    return area.includes(lineName) || area.includes(capexLineFilter.toLowerCase());
+  });
+  const totalCost=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalDepr=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalNBV =filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
+  const active   =filteredCapex.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
 
   $('capex-grid').innerHTML=`
     <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${capexData.length}</div><div class="capex-stat-sub">${active} active</div></div>
@@ -1801,7 +1841,7 @@ function renderCapex(){
     <div class="capex-stat"><div class="capex-stat-label">Monthly Depreciation</div><div class="capex-stat-val">${fmt(totalDepr)}</div><div class="capex-stat-sub">Not in unit cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
 
-  $('capex-tbody').innerHTML=capexData.map(r=>{
+  $('capex-tbody').innerHTML=filteredCapex.map(r=>{
     const cost=parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
     const depr=parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
     const nbv =parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0;
@@ -1839,7 +1879,13 @@ function renderTable(){
 // ── LINE FILTER ───────────────────────────────────────────────────────────────
 function populateLineFilter(){
   const sel=$('f-line');
-  Object.keys(SD.line_totals).forEach(code=>{const o=document.createElement('option');o.value=code;o.textContent=`${code} — ${lname(code)}`;sel.appendChild(o);});
+  // Clear all except first "All Lines" option
+  while(sel.options.length > 1) sel.remove(1);
+  // Use live prodData lines if available, else fall back to SD.line_totals
+  const lineCodes = prodData && prodData.length > 0
+    ? [...new Set(prodData.map(r=>r.line).filter(l=>l&&!/^(DAY|OEE)$/.test(l)))].sort()
+    : Object.keys(SD.line_totals);
+  lineCodes.forEach(code=>{const o=document.createElement('option');o.value=code;o.textContent=`${code} — ${lname(code)}`;sel.appendChild(o);});
 }
 
 function updateTS(){const el=$('ts');if(el)el.innerHTML=`<span style="color:var(--green);margin-right:4px">●</span>Last updated: ${nowStr()} · Auto-refresh every 60s`;}
