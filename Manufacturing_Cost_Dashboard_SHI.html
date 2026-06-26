@@ -1760,10 +1760,19 @@ function renderLabour(c){
 // ── RENDER MAINTENANCE SECTION ────────────────────────────────────────────────
 function renderMaintenance(c){
   // Type cards
+  // PM:BRK ratio — normalise so smaller side = 1.0
+  const _pm=c.maintPreventive||0, _brk=c.maintBreakdown||0;
+  let pmRatioStr='–';
+  if(_pm>0||_brk>0){
+    const base=Math.min(_pm,_brk)||1;
+    const pr=(_pm/base).toFixed(1), br=(_brk/base).toFixed(1);
+    pmRatioStr=`${pr} : ${br}`;
+  }
+  const pmHealthy=_brk<=_pm;
   $('maint-type-cards').innerHTML=`
     <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div></div>
     <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub">${c.maintBreakdown>c.maintPreventive?'⚠ Breakdown > Preventive':'✓ PM ratio healthy'}</div></div>`;
+    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub" style="margin-top:4px;"><span style="font-size:11px;font-weight:700;color:${pmHealthy?'var(--teal)':'var(--red)'};">PM : BRK &nbsp;${pmRatioStr}</span></div><div class="maint-type-sub" style="margin-top:3px;">${pmHealthy?'✓ PM ratio healthy':'⚠ Breakdown > Preventive'}</div></div>`;
 
   const filteredEngData = getFilteredEng();
 
