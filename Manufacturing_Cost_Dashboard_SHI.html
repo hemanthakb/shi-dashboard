@@ -309,7 +309,18 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <span id="countdown" style="color:var(--blue);font-weight:700;min-width:22px;display:inline-block"></span>s
     </div>
     <button class="btn btn-gold no-print" id="connect-btn" onclick="manualRefresh()" title="Refresh all data now">↻ Refresh</button>
-    <button class="btn btn-blue no-print" onclick="window.print()">🖨 Print</button>
+    <select id="print-section-sel" class="no-print" title="Choose section to print" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);cursor:pointer;height:30px;">
+      <option value="all">🖨 All Sections</option>
+      <option value="kpi">KPI Cards</option>
+      <option value="trend">Cost Trend</option>
+      <option value="labour">Labour</option>
+      <option value="maintenance">Engineering &amp; Maintenance</option>
+      <option value="electricity">Electricity</option>
+      <option value="capex">Capital Expenditure</option>
+      <option value="hourly">Hourly Labour Cost</option>
+      <option value="production">Production Database</option>
+    </select>
+    <button class="btn btn-blue no-print" onclick="printSection()">🖨 Print</button>
   </div>
 </div>
 
@@ -355,10 +366,13 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <div style="font-size:10px;color:var(--text3);margin-bottom:14px;" id="ts"></div>
 
   <!-- ── KPI CARDS ────────────────────────────────────────────────────────── -->
+  <div data-print-section="kpi">
   <div class="section-title" style="margin:10px 0 10px;">Key Performance Indicators <span class="section-tag tag-total">Period Totals</span></div>
   <div class="kgrid" id="kgrid"></div>
+  </div>
 
   <!-- ── COST TREND ───────────────────────────────────────────────────────── -->
+  <div data-print-section="trend">
   <div class="section-title" style="margin:10px 0 10px;">Cost Trend <span class="section-tag tag-total">Stacked Daily</span></div>
   <div class="cgrid">
     <div class="cc">
@@ -378,8 +392,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <div id="mixChartEmpty" style="display:none;padding:40px;text-align:center;color:var(--text3);font-size:12px;">Connect data sources to see cost mix</div>
     </div>
   </div>
+  </div>
 
   <!-- ── LABOUR SECTION ───────────────────────────────────────────────────── -->
+  <div data-print-section="labour">
   <div class="section-title">Labour <span class="section-tag tag-labour">ERP Allocation</span></div>
   <div class="stream-grid" id="labour-kpis"></div>
   <div class="egrid">
@@ -402,8 +418,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <tfoot id="live-alloc-total"></tfoot>
     </table></div>
   </div>
+  </div>
 
   <!-- ── MAINTENANCE SECTION ──────────────────────────────────────────────── -->
+  <div data-print-section="maintenance">
   <div class="section-title">Engineering & Maintenance <span class="section-tag tag-maint">Engineering Drive</span></div>
   <div class="maint-type-grid" id="maint-type-cards"></div>
   <div class="egrid">
@@ -424,8 +442,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <tfoot id="maint-tfoot"></tfoot>
     </table></div>
   </div>
+  </div>
 
   <!-- ── ELECTRICITY SECTION ──────────────────────────────────────────────── -->
+  <div data-print-section="electricity">
   <div class="section-title">Electricity <span class="section-tag tag-elec">Daily KWh + Monthly Bill</span></div>
   <div class="elec-grid" id="elec-meters"></div>
   <div class="egrid">
@@ -438,8 +458,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <div id="bill-tracker" style="max-height:220px;overflow-y:auto;"></div>
     </div>
   </div>
+  </div>
 
   <!-- ── CAPEX INFO PANEL ─────────────────────────────────────────────────── -->
+  <div data-print-section="capex">
   <div class="section-title">Capital Expenditure <span class="section-tag tag-capex">Info Only — Not in Cost Totals</span></div>
   <div class="capex-panel" id="capex-panel">
     <div class="capex-header">
@@ -462,8 +484,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
     </div>
     <button onclick="toggleCapexTable()" id="capex-toggle-btn" style="margin-top:10px;padding:5px 14px;border-radius:6px;border:1px solid #e8d5a0;background:#fff;color:var(--gold-dk);font-size:11px;cursor:pointer;font-weight:600;">Show Asset Detail ▼</button>
   </div>
+  </div>
 
   <!-- ── HOURLY RATES SECTION ────────────────────────────────────────────── -->
+  <div data-print-section="hourly">
   <div class="section-title">Hourly Labour Cost by Product <span class="section-tag tag-labour">Actual from ERP Allocation + Production DB</span></div>
 
   <!-- Summary filter -->
@@ -529,8 +553,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       </table>
     </div>
   </div>
+  </div>
 
   <!-- ── PRODUCTION DB SECTION ────────────────────────────────────────────── -->
+  <div data-print-section="production">
   <div class="section-title">Production Database <span class="section-tag tag-labour">Jan–Mar 2026 Historical</span></div>
   <div class="tcard" style="margin-bottom:18px;">
     <div class="thead"><div><div class="ct">Line-by-Line Cost Breakdown — Production DB</div><div class="cs">Planned vs actual labour hours and output · Jan–Mar 2026</div></div></div>
@@ -543,6 +569,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <tbody id="tbody"></tbody>
       <tfoot id="tfoot"></tfoot>
     </table></div>
+  </div>
   </div>
 
   </div><!-- /dash-content -->
@@ -860,9 +887,9 @@ async function fetchCSV(url){
   try{
     const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const fetchUrl = isLocal ? 'https://corsproxy.io/?' + encodeURIComponent(url + '&t=' + Date.now()) : url + '&t=' + Date.now();
-    // 8 second timeout per source
+    // 15 second timeout per source
     const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(), 8000);
+    const timeout = setTimeout(()=>controller.abort(), 15000);
     const r=await fetch(fetchUrl,{cache:'no-store', signal:controller.signal});
     clearTimeout(timeout);
     if(!r.ok)throw new Error('HTTP '+r.status);
@@ -1279,8 +1306,6 @@ function renderHourlyRates() {
 
   const pt        = allocData.productTotals || {};
   const blendedHr = EMPLOYMENT_RATES.blendedHr;
-  // Use the global line filter (f-line) as primary; hr-line-filter as secondary (product-level sub-filter)
-  const globalFilter = getLineFilter();
   const lineFilter = document.getElementById('hr-line-filter') ?
                      document.getElementById('hr-line-filter').value : 'all';
   const viewMode   = document.getElementById('hr-view-mode') ?
@@ -1308,9 +1333,6 @@ function renderHourlyRates() {
   Object.entries(pt).forEach(([key, alloc]) => {
     const lineName = alloc.line || '';
     const prodName = alloc.product || '';
-    // Global line filter first (f-line dropdown)
-    if(globalFilter !== 'all' && !lineName.toLowerCase().includes((LM[globalFilter]||globalFilter).toLowerCase()) && !lineName.toLowerCase().includes(globalFilter.toLowerCase())) return;
-    // Then hr-line-filter sub-filter
     if(lineFilter !== 'all' && !lineName.toLowerCase().includes(lineFilter.toLowerCase())) return;
 
     const actuals  = prodActuals[prodName] || { runHrs:0, actCS:0, actKg:0 };
@@ -1671,33 +1693,24 @@ function renderMix(c){
 function renderLabour(c){
   // Labour KPI stream cards — use live allocation data if available
   const hr = EMPLOYMENT_RATES.blendedHr;
-  const lf = getLineFilter(); // global line filter
-
-  // Filter allocData.lineTotals by selected line
-  const getH=v=>typeof v==='object'?v.hours:v;
-  const rawA = allocData ? allocData.lineTotals : SD.alloc_by_line;
-  const filteredA = {};
-  Object.keys(rawA).forEach(k=>{
-    if(lf === 'all' || k.toLowerCase().includes((LM[lf]||lf).toLowerCase()) || k.toLowerCase().includes(lf.toLowerCase()))
-      filteredA[k] = rawA[k];
-  });
-  const filteredHrs = Object.values(filteredA).reduce((s,v)=>s+getH(v),0);
+  const otHr  = EMPLOYMENT_RATES.helper.otHr;
+  const dotHr = EMPLOYMENT_RATES.helper.dotHr;
 
   if(allocData && allocData.filesFound > 0) {
-    // Use filtered totals for KPI cards
-    const totalHrs = lf === 'all' ? allocData.totalHours : filteredHrs;
+    // Live data from ERP allocation
+    const totalHrs = allocData.totalHours;
     const days     = allocData.filesFound;
     const emps     = allocData.employees;
-    const labTotal = lf === 'all' ? (allocData.totalCost || (totalHrs * hr)) : Math.round(filteredHrs * hr);
+    const labTotal = allocData.totalCost || (totalHrs * hr);
     const src = `${days} day(s) · ${emps} employees · ERP`;
 
-    // OT/DOT only meaningful at all-lines level; show dashes when filtered
+    // OT/DOT calculated per-employee-per-day (>9hrs/day = OT 1.5x; Sunday/Poya = DOT 2.0x for the whole day)
     const otb = allocData.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
 
     $('labour-kpis').innerHTML=`
-      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${lf==='all'?fmt(otb.normalCost):fmt(labTotal)}</div><div class="ksub">${lf==='all'?otb.normalHours.toFixed(1)+' hrs · Rate 1.0× · '+src:totalHrs.toFixed(1)+' hrs · '+src+' · '+((LM[lf]||lf))}</div></div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${lf==='all'?fmt(otb.otCost):'–'}</div><div class="ksub">${lf==='all'?otb.otHours.toFixed(1)+' hrs above 9hrs/day per employee':'Filter: all-lines view only'}</div></div>
-      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${lf==='all'?fmt(otb.dotCost):'–'}</div><div class="ksub">${lf==='all'?otb.dotHours.toFixed(1)+' hrs on Sunday/Poya days':'Filter: all-lines view only'}</div></div>
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div></div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days</div></div>
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>`;
   } else {
     // No live data — show placeholder
@@ -1707,51 +1720,43 @@ function renderLabour(c){
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>`;
   }
 
-  // Alloc chart — filtered by selected line
+  // Alloc chart
   if(charts.alloc)charts.alloc.destroy();
+  const rawA=allocData?allocData.lineTotals:SD.alloc_by_line;
+  const getH=v=>typeof v==='object'?v.hours:v;
+  const a={};Object.keys(rawA).forEach(k=>{a[k]=getH(rawA[k]);});
   const from=$('f-from').value,to=$('f-to').value;
-  const sub=allocData&&allocData.filesFound>0?`${from} to ${to} · ${allocData.filesFound} day(s) · ${allocData.employees} employees · ${filteredHrs.toFixed(1)} hrs · LKR ${Math.round(filteredHrs*hr).toLocaleString()}`:'No Labour Allocation data — connect ERP';
-  const lines=Object.keys(filteredA).sort((x,y)=>getH(filteredA[y])-getH(filteredA[x]));
-  const costs=lines.map(l=>Math.round(getH(filteredA[l])*SD.avg_blended));
+  const sub=allocData&&allocData.filesFound>0?`${from} to ${to} · ${allocData.filesFound} day(s) · ${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs · LKR ${Math.round(allocData.totalCost||0).toLocaleString()}`:'No Labour Allocation data — connect ERP';
+  const lines=Object.keys(a).sort((x,y)=>a[y]-a[x]);
+  const costs=lines.map(l=>Math.round(a[l]*SD.avg_blended));
   const subEl=$('alloc-sub');if(subEl)subEl.textContent=sub;
   const badge=$('alloc-live-badge');if(badge)badge.style.display=allocData?'':'none';
-  charts.alloc=new Chart($('allocChart').getContext('2d'),{type:'bar',data:{labels:lines,datasets:[{label:'Hours',data:lines.map(l=>getH(filteredA[l])),backgroundColor:'rgba(26,95,168,.25)',borderColor:'#1a5fa8',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(2)}h · Est. LKR ${costs[c.dataIndex].toLocaleString()}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068',maxRotation:35}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'h'}}}}});
+  charts.alloc=new Chart($('allocChart').getContext('2d'),{type:'bar',data:{labels:lines,datasets:[{label:'Hours',data:lines.map(l=>a[l]),backgroundColor:'rgba(26,95,168,.25)',borderColor:'#1a5fa8',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(2)}h · Est. LKR ${costs[c.dataIndex].toLocaleString()}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068',maxRotation:35}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'h'}}}}});
 
-  // Hrs variance — use live allocData if available, else SD fallback
+  // Hrs variance
   if(charts.hrs)charts.hrs.destroy();
-  let hlines, vp;
-  if(allocData && allocData.lineTotals) {
-    const lt2 = allocData.lineTotals;
-    hlines = Object.keys(filteredA).filter(k=>lt2[k]&&typeof lt2[k]==='object'&&lt2[k].planned_hrs>0)
-                   .sort((a,b)=>(getH(lt2[b])-lt2[b].planned_hrs)-(getH(lt2[a])-lt2[a].planned_hrs));
-    vp = hlines.map(l=>lt2[l].planned_hrs>0?((getH(lt2[l])-lt2[l].planned_hrs)/lt2[l].planned_hrs*100):0);
-  } else {
-    const lt=SD.line_totals;
-    hlines=Object.keys(lt).filter(k=>lt[k].planned_hrs>0&&(lf==='all'||k===lf)).sort((a,b)=>(lt[b].actual_hrs-lt[b].planned_hrs)-(lt[a].actual_hrs-lt[a].planned_hrs));
-    vp=hlines.map(l=>lt[l].planned_hrs>0?((lt[l].actual_hrs-lt[l].planned_hrs)/lt[l].planned_hrs*100):0);
-  }
+  const lt=SD.line_totals,hlines=Object.keys(lt).filter(k=>lt[k].planned_hrs>0).sort((a,b)=>(lt[b].actual_hrs-lt[b].planned_hrs)-(lt[a].actual_hrs-lt[a].planned_hrs));
+  const vp=hlines.map(l=>lt[l].planned_hrs>0?((lt[l].actual_hrs-lt[l].planned_hrs)/lt[l].planned_hrs*100):0);
   charts.hrs=new Chart($('hrsChart').getContext('2d'),{type:'bar',data:{labels:hlines,datasets:[{label:'Hrs Var %',data:vp,backgroundColor:vp.map(v=>v>15?'rgba(192,57,43,.55)':v>5?'rgba(160,94,0,.55)':v<-5?'rgba(26,122,60,.55)':'rgba(26,95,168,.35)'),borderWidth:0,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.x>=0?'+':''}${c.parsed.x.toFixed(1)}% vs plan`}}},scales:{x:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'%'},min:-50,max:100},y:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068'}}}}});
 
-  // Live alloc table — filtered
+  // Live alloc table
   const sec=$('live-alloc-section');
   if(sec&&allocData&&allocData.filesFound>0){
     sec.style.display='';
-    const lines2=Object.keys(filteredA).sort((a,b)=>getH(filteredA[b])-getH(filteredA[a]));
-    const tH=lines2.reduce((s,l)=>s+getH(filteredA[l]),0);
-    const tC=Math.round(tH*SD.avg_blended);
+    const lt2=allocData.lineTotals||{};
+    const lines2=Object.keys(lt2).sort((a,b)=>getH(lt2[b])-getH(lt2[a]));
+    const tH=lines2.reduce((s,l)=>s+getH(lt2[l]),0);
+    const tC=allocData.totalCost||Math.round(tH*SD.avg_blended);
     const dl=allocData.filesFound===1?'1 day':`${allocData.filesFound} days`;
     const subEl2=$('alloc-table-sub');if(subEl2)subEl2.textContent=`${from} to ${to} · ${dl} · ${allocData.employees} employees · ${tH.toFixed(2)} hrs`;
-    $('live-alloc-tbody').innerHTML=lines2.map(line=>{const h=getH(filteredA[line]),cost=Math.round(h*SD.avg_blended),p=tH>0?(h/tH*100).toFixed(1):0;return`<tr><td style="text-align:left;font-weight:600;color:var(--blue)">${line}</td><td style="text-align:right;font-weight:700">${h.toFixed(2)}</td><td style="text-align:right">${p}%</td><td style="text-align:right;font-weight:700;color:var(--green)">${fmtF(cost)}</td></tr>`;}).join('');
+    $('live-alloc-tbody').innerHTML=lines2.map(line=>{const h=getH(lt2[line]),cost=Math.round(h*SD.avg_blended),p=tH>0?(h/tH*100).toFixed(1):0;return`<tr><td style="text-align:left;font-weight:600;color:var(--blue)">${line}</td><td style="text-align:right;font-weight:700">${h.toFixed(2)}</td><td style="text-align:right">${p}%</td><td style="text-align:right;font-weight:700;color:var(--green)">${fmtF(cost)}</td></tr>`;}).join('');
     $('live-alloc-total').innerHTML=`<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border2)"><td style="text-align:left">TOTAL — ${dl}</td><td style="text-align:right">${tH.toFixed(2)}</td><td style="text-align:right">100%</td><td style="text-align:right;color:var(--blue)">${fmtF(tC)}</td></tr>`;
   }else if(sec)sec.style.display='none';
 }
 
 // ── RENDER MAINTENANCE SECTION ────────────────────────────────────────────────
 function renderMaintenance(c){
-  // Declare FIRST — used throughout this function
-  const filteredEngData = getFilteredEng();
-
-  // Type cards — use filtered totals from c (calcCosts already calls getFilteredEng)
+  // Type cards
   $('maint-type-cards').innerHTML=`
     <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div></div>
     <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div></div>
@@ -1766,6 +1771,7 @@ function renderMaintenance(c){
 
   // Line chart
   const lineAgg={};
+  const filteredEngData = getFilteredEng();
   filteredEngData.forEach(r=>{const l=r['line__area']||r['line_area']||r['line___area']||'Unknown';const amt=parseFloat(String(r['amount_lkr']||r['amount']).replace(/,/g,''))||0;if(!lineAgg[l])lineAgg[l]=0;lineAgg[l]+=amt;});
   const mLines=Object.keys(lineAgg).sort((a,b)=>lineAgg[b]-lineAgg[a]);
   if(charts.maintLine)charts.maintLine.destroy();
@@ -1877,6 +1883,33 @@ function renderCapex(){
   }).join('');
 }
 
+// ── SECTION PRINT ─────────────────────────────────────────────────────────────
+function printSection(){
+  const sel = document.getElementById('print-section-sel');
+  const chosen = sel ? sel.value : 'all';
+  if(chosen === 'all'){ window.print(); return; }
+
+  // Hide every section except the chosen one
+  const allSections = document.querySelectorAll('[data-print-section]');
+  const hidden = [];
+  allSections.forEach(function(el){
+    if(el.getAttribute('data-print-section') !== chosen){
+      el.style.display = 'none';
+      hidden.push(el);
+    }
+  });
+
+  // Also hide the timestamp row to keep it clean
+  const ts = document.getElementById('ts');
+  const tsDisplay = ts ? ts.style.display : null;
+
+  window.print();
+
+  // Restore everything after printing
+  hidden.forEach(function(el){ el.style.display = ''; });
+  if(ts && tsDisplay !== null) ts.style.display = tsDisplay;
+}
+
 function toggleCapexTable(){
   const wrap=$('capex-table-wrap'),btn=$('capex-toggle-btn');
   if(!wrap)return;
@@ -1970,12 +2003,11 @@ function init(){
   renderAll();
   startCountdown();
   updateStickyOffsets();
-  // Never auto-connect on load — always require manual button press.
-  // This prevents the page hanging/lagging on open regardless of protocol.
-  const bar=$('live-bar'),bt=$('live-bar-text');
-  if(bar&&bt){
-    bar.className='live-bar disconnected';
-    bt.textContent='💡 Dashboard ready — press Connect / Refresh to load live data from Google Sheets.';
+  if(window.location.protocol==='https:'||window.location.protocol==='http:'){
+    setTimeout(connectAll,800);
+  }else{
+    const bar=$('live-bar'),bt=$('live-bar-text');
+    if(bar&&bt){bar.className='live-bar disconnected';bt.textContent='💡 Opened as local file — use Refresh button to load live data, or open from Google Drive for auto-connect.';}
   }
 }
 
