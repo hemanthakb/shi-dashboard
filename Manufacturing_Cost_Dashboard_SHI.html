@@ -71,14 +71,14 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .setup-btn:hover{background:#0a6055;}
 
 /* MAIN */
-.main{padding:18px 24px 26px;max-width:1500px;margin:0 auto;}
+.main{padding:18px 24px 26px;max-width:1600px;margin:0 auto;}
 .dx-mark{position:fixed;left:0;right:0;bottom:0;z-index:90;display:flex;justify-content:center;align-items:center;
   height:16px;background:rgba(255,255,255,.94);border-top:1px solid var(--border);
   user-select:none;-webkit-user-select:none;}
 .dx-mark img{height:9px;width:auto;display:block;pointer-events:none;-webkit-user-drag:none;opacity:.8;}
 
 /* DASHBOARD LAYOUT — content + alert sidebar */
-.dash-layout{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;}
+.dash-layout{display:grid;grid-template-columns:1fr 220px;gap:20px;align-items:start;}
 .dash-content{min-width:0;}
 
 /* ALERTS — sticky right sidebar */
@@ -151,18 +151,21 @@ canvas{max-height:230px;}
 .egrid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:18px;}
 
 /* TABLE */
-.tcard{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:18px;box-shadow:var(--shadow);}
+.tcard{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:clip;margin-bottom:18px;box-shadow:var(--shadow);}
 .thead{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2);}
-.tscroll{overflow-x:auto;}
+.tscroll{overflow:auto;max-height:420px;}
+/* Row-count guide: ~36px/row × 12 rows ≈ 432px — shows ~12 data rows before scroll */
 table{width:100%;border-collapse:collapse;}
-th{background:var(--surface2);padding:9px 12px;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+th{background:var(--surface2);padding:9px 12px;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;
+  position:sticky;top:0;z-index:2;}
 th:first-child,th:nth-child(2){text-align:left;}
 td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--text);}
 td:first-child{text-align:left;font-weight:700;font-size:11px;color:var(--blue);}
 td:nth-child(2){text-align:left;color:var(--text2);font-size:11px;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:#f8faff;}
-tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border2);}
+tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border2);
+  position:sticky;bottom:0;z-index:2;}
 .pb{display:flex;align-items:center;gap:5px;justify-content:flex-end;}
 .pbt{width:60px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0;}
 .pbf{height:100%;border-radius:3px;}
@@ -188,6 +191,11 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   .alert-sidebar{position:static;max-height:none;box-shadow:none;border:1px solid #ccc;margin-bottom:14px;}
   .alert-zone{overflow:visible;}
   .print-hide-section>*{display:none!important;}
+  /* Remove scroll containers for full-table printing */
+  .tscroll{max-height:none!important;overflow:visible!important;}
+  #capex-table-wrap{max-height:none!important;overflow:visible!important;}
+  th{position:static!important;}
+  tfoot tr td{position:static!important;}
   @page{margin:12mm;size:A4 landscape;}
 }
 @media(max-width:768px){
@@ -439,8 +447,8 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   </div>
   <div class="tcard" id="maint-table-card" style="margin-bottom:18px;display:none;">
     <div class="thead"><div><div class="ct">Maintenance Cost Detail</div><div class="cs" id="maint-table-sub"></div></div></div>
-    <div class="tscroll"><table>
-      <thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Line / Area</th><th style="text-align:left">Cost Type</th><th style="text-align:left">Sub-Type</th><th>Amount (LKR)</th><th style="text-align:left">Supplier</th><th style="text-align:left">Description</th></tr></thead>
+    <div class="tscroll"><table style="min-width:780px">
+      <thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Line / Area</th><th style="text-align:left">Cost Type</th><th style="text-align:left">Sub-Type</th><th>Amount (LKR)</th><th style="text-align:left">Supplier</th><th style="text-align:left;min-width:180px">Description</th></tr></thead>
       <tbody id="maint-tbody"></tbody>
       <tfoot id="maint-tfoot"></tfoot>
     </table></div>
@@ -472,15 +480,15 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <div class="capex-note">ℹ Info panel only — Capex depreciation not included in unit cost calculations</div>
     </div>
     <div class="capex-grid" id="capex-grid"></div>
-    <div id="capex-table-wrap" style="margin-top:12px;display:none;">
+    <div id="capex-table-wrap" style="margin-top:12px;display:none;overflow:auto;max-height:380px;border-radius:6px;border:1px solid #e8d5a0;">
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr style="background:#e8d5a0;">
-          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Asset</th>
-          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Line/Area</th>
-          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Cost (LKR)</th>
-          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Monthly Depr.</th>
-          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Net Book Value</th>
-          <th style="text-align:center;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Status</th>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Asset</th>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Line/Area</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Cost (LKR)</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Monthly Depr.</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Net Book Value</th>
+          <th style="text-align:center;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Status</th>
         </tr></thead>
         <tbody id="capex-tbody"></tbody>
       </table>
@@ -535,10 +543,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       </div>
     </div>
     <div class="tscroll">
-      <table>
+      <table style="min-width:1100px">
         <thead><tr>
-          <th style="text-align:left">Product</th>
-          <th style="text-align:left">Line</th>
+          <th style="text-align:left;min-width:160px">Product</th>
+          <th style="text-align:left;min-width:140px">Line</th>
           <th>Alloc Hrs</th>
           <th>Run Time</th>
           <th>Std HC</th>
@@ -563,9 +571,9 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <div class="section-title">Production Database <span class="section-tag tag-labour">Jan–Mar 2026 Historical</span></div>
   <div class="tcard" style="margin-bottom:18px;">
     <div class="thead"><div><div class="ct">Line-by-Line Cost Breakdown — Production DB</div><div class="cs">Planned vs actual labour hours and output · Jan–Mar 2026</div></div></div>
-    <div class="tscroll"><table>
+    <div class="tscroll"><table style="min-width:1000px">
       <thead><tr>
-        <th>Code</th><th>Production Line</th><th>Days</th>
+        <th>Code</th><th style="min-width:160px">Production Line</th><th>Days</th>
         <th>Plan Hrs</th><th>Act Hrs</th><th>Plan CS</th><th>Act CS</th><th>Eff%</th>
         <th>Planned Cost</th><th>Actual Cost</th><th>Variance</th><th>Hrs Var%</th><th>Status</th>
       </tr></thead>
