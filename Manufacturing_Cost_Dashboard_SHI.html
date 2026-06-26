@@ -1629,6 +1629,30 @@ function renderAlerts(rows,c){
   }
 }
 
+// ── ELECTRICITY RATE HELPER ───────────────────────────────────────────────────
+// Returns {rateByMonth: {"YYYY-MM"→rate}, fallbackRate} built from elecBill.
+// est_cost_lkr is an Excel formula that exports as 0 in CSV — always compute
+// cost here as KWh × rate instead of reading the formula column.
+function getElecRateMap(){
+  const MONTHS=['january','february','march','april','may','june',
+    'july','august','september','october','november','december'];
+  const rateByMonth={};
+  let fallbackRate=0;
+  if(elecBill.length>0){
+    elecBill.forEach(r=>{
+      const mName=String(r['month']||'').toLowerCase().trim();
+      const yr=parseInt(r['year'])||0;
+      const mNum=MONTHS.indexOf(mName)+1;
+      if(!mNum||!yr) return;
+      const rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+      if(rate>0) rateByMonth[`${yr}-${String(mNum).padStart(2,'0')}`]=rate;
+    });
+    const last=elecBill[elecBill.length-1];
+    fallbackRate=parseFloat(String(last['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+  }
+  return{rateByMonth,fallbackRate};
+}
+
 // ── RENDER TREND CHART ────────────────────────────────────────────────────────
 function renderTrend(rows,c){
   if(charts.trend)charts.trend.destroy();
@@ -1663,26 +1687,7 @@ function renderTrend(rows,c){
 
   // Build per-day Electricity cost: KWh × rate from the bill that covers that month.
   // est_cost_lkr is an Excel formula and doesn't survive CSV export reliably.
-  const MONTH_NAMES_TREND=['january','february','march','april','may','june',
-    'july','august','september','october','november','december'];
-  // Build a map: "YYYY-MM" → rate
-  const billRateByMonth={};
-  if(elecBill.length>0){
-    elecBill.forEach(r=>{
-      const mName=String(r['month']||'').toLowerCase().trim();
-      const yr=parseInt(r['year'])||0;
-      const mNum=MONTH_NAMES_TREND.indexOf(mName)+1;
-      if(!mNum||!yr) return;
-      const rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
-      if(rate>0) billRateByMonth[`${yr}-${String(mNum).padStart(2,'0')}`]=rate;
-    });
-  }
-  // Fallback: last available rate
-  let fallbackRate = 0;
-  if(elecBill.length>0){
-    const lastBill = elecBill[elecBill.length-1];
-    fallbackRate = parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
-  }
+  const {rateByMonth:billRateByMonth, fallbackRate} = getElecRateMap();
   const elecByDate = {};
   getFilteredElec().forEach(r=>{
     const d = normaliseDate(String(r['date']||'').trim());
@@ -1857,10 +1862,16 @@ function renderElectricity(c){
   // Area meters
   const areaAgg={};
   const filteredElecData = getFilteredElec();
+  // Use shared rate map — est_cost_lkr is an Excel formula that exports as 0 in CSV
+  const {rateByMonth, fallbackRate} = getElecRateMap();
   filteredElecData.forEach(r=>{
     const area=r['factory_area']||r['area']||'Unknown';
     const kwh=parseFloat(r['kwh_consumed']||0)||0;
-    const cost=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
+    // Compute cost: KWh × rate for that month (mirrors renderTrend logic)
+    const nd=normaliseDate(String(r['date']||'').trim());
+    const ym=nd?nd.slice(0,7):'';
+    const rate=(ym&&rateByMonth[ym])||fallbackRate;
+    const cost=kwh*rate;
     const kg=parseFloat(r['production_output_kg']||0)||0;
     if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
     areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
@@ -1869,8 +1880,9 @@ function renderElectricity(c){
   const areas=Object.keys(areaAgg);
   $('elec-meters').innerHTML=areas.length>0?areas.map(a=>{
     const d=areaAgg[a];
-    const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'–';
-    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
+    const costLine=d.cost>0?fmtF(d.cost):(fallbackRate===0?'No rate configured':'–');
+    const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'';
+    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${costLine}</div>${eff?`<div class="meter-eff">${eff} KWh/kg</div>`:''}</div>`;
   }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
 
   // Daily KWh trend
