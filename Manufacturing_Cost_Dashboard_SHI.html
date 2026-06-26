@@ -1509,18 +1509,39 @@ function calcCosts(from,to){
     if(st.includes('break')||st.includes('correct'))maintBreakdown+=amt;
   });
 
-  // Electricity (filtered by line)
+  // Electricity — KWh from daily sheet (reliable numbers)
+  // Cost from monthly bills matched to the selected date range (est_cost_lkr is
+  // an Excel formula that doesn't survive CSV export, so bills are authoritative)
   const elecData = getFilteredElec();
   let elecKwh=0, elecCost=0;
   elecData.forEach(r=>{
     elecKwh+=parseFloat(r['kwh_consumed']||0)||0;
-    elecCost+=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
   });
-  // If no cost calculated, derive from bill rate
-  if(elecCost===0&&elecKwh>0&&elecBill.length>0&&getLineFilter()==='all'){
+
+  // Match monthly bills to the selected date range
+  const MONTH_MAP={'january':1,'february':2,'march':3,'april':4,'may':5,'june':6,
+    'july':7,'august':8,'september':9,'october':10,'november':11,'december':12};
+  const fromDate=new Date(from), toDate=new Date(to);
+  if(elecBill.length>0){
+    elecBill.forEach(r=>{
+      const mName=String(r['month']||'').toLowerCase().trim();
+      const yr=parseInt(r['year'])||0;
+      const mNum=MONTH_MAP[mName]||0;
+      if(!mNum||!yr) return;
+      // Bill covers the entire month — include if the month overlaps the selected range
+      const billStart=new Date(yr,mNum-1,1);
+      const billEnd=new Date(yr,mNum,0); // last day of month
+      if(billEnd>=fromDate && billStart<=toDate){
+        const amt=parseFloat(String(r['total_bill_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+        elecCost+=amt;
+      }
+    });
+  }
+  // If no bill matched, fall back to KWh × latest rate
+  if(elecCost===0&&elecKwh>0&&elecBill.length>0){
     const lastBill=elecBill[elecBill.length-1];
-    const rate=parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
-    if(rate>0)elecCost=elecKwh*rate;
+    const rate=parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+    if(rate>0) elecCost=elecKwh*rate;
   }
 
   // Total kg — use live production DB if available, else embedded historical data
@@ -1632,21 +1653,36 @@ function renderTrend(rows,c){
     maintByDate[d] = (maintByDate[d]||0) + amt;
   });
 
-  // Build REAL per-day Electricity totals from elecDaily (date + est_cost_lkr,
-  // falling back to kwh × latest bill rate when est_cost_lkr isn't populated —
-  // same fallback logic used for the period-total elecCost KPI).
+  // Build per-day Electricity cost: KWh × rate from the bill that covers that month.
+  // est_cost_lkr is an Excel formula and doesn't survive CSV export reliably.
+  const MONTH_NAMES_TREND=['january','february','march','april','may','june',
+    'july','august','september','october','november','december'];
+  // Build a map: "YYYY-MM" → rate
+  const billRateByMonth={};
+  if(elecBill.length>0){
+    elecBill.forEach(r=>{
+      const mName=String(r['month']||'').toLowerCase().trim();
+      const yr=parseInt(r['year'])||0;
+      const mNum=MONTH_NAMES_TREND.indexOf(mName)+1;
+      if(!mNum||!yr) return;
+      const rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+      if(rate>0) billRateByMonth[`${yr}-${String(mNum).padStart(2,'0')}`]=rate;
+    });
+  }
+  // Fallback: last available rate
   let fallbackRate = 0;
   if(elecBill.length>0){
     const lastBill = elecBill[elecBill.length-1];
-    fallbackRate = parseFloat(lastBill['rate_per_kwh_lkr']||lastBill['rate_per_kwh'])||0;
+    fallbackRate = parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
   }
   const elecByDate = {};
   getFilteredElec().forEach(r=>{
     const d = normaliseDate(String(r['date']||'').trim());
     if(!d) return;
     const kwh = parseFloat(r['kwh_consumed']||0)||0;
-    let cost = parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
-    if(cost===0 && kwh>0 && fallbackRate>0) cost = kwh*fallbackRate;
+    const ym = d.slice(0,7); // "YYYY-MM"
+    const rate = billRateByMonth[ym] || fallbackRate;
+    const cost = kwh * rate;
     elecByDate[d] = (elecByDate[d]||0) + cost;
   });
 
