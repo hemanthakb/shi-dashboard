@@ -153,7 +153,8 @@ canvas{max-height:230px;}
 /* TABLE */
 .tcard{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:18px;box-shadow:var(--shadow);}
 .thead{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2);}
-.tscroll{overflow-x:auto;}
+.tscroll{overflow-x:auto;overflow-y:auto;max-height:460px;}
+.tscroll thead th{position:sticky;top:0;background:#fff;z-index:1;box-shadow:0 1px 0 var(--border);}
 table{width:100%;border-collapse:collapse;}
 th{background:var(--surface2);padding:9px 12px;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
 th:first-child,th:nth-child(2){text-align:left;}
@@ -162,6 +163,19 @@ td:first-child{text-align:left;font-weight:700;font-size:11px;color:var(--blue);
 td:nth-child(2){text-align:left;color:var(--text2);font-size:11px;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:#f8faff;}
+
+/* Compact wide tables (many columns) so they fit the visible width without
+   forcing a horizontal scrollbar. Headers wrap onto 2 lines instead of
+   staying nowrap; the long name column truncates to one line with ellipsis
+   (full text on hover via title attr) instead of stretching the table. */
+.tcompact th{padding:6px 6px;font-size:8.5px;white-space:normal;line-height:1.25;}
+.tcompact td{padding:6px 6px;font-size:10.5px;}
+.tcompact td.tname{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media(max-width:1300px){
+  .tcompact th{font-size:8px;padding:5px 5px;}
+  .tcompact td{font-size:9.5px;padding:5px 5px;}
+  .tcompact td.tname{max-width:100px;}
+}
 tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border2);}
 .pb{display:flex;align-items:center;gap:5px;justify-content:flex-end;}
 .pbt{width:60px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0;}
@@ -187,6 +201,8 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   .dash-layout{grid-template-columns:1fr;}
   .alert-sidebar{position:static;max-height:none;box-shadow:none;border:1px solid #ccc;margin-bottom:14px;}
   .alert-zone{overflow:visible;}
+  .tscroll{max-height:none!important;overflow:visible!important;}
+  .tscroll thead th{position:static;box-shadow:none;}
   .print-hide-section>*{display:none!important;}
   @page{margin:12mm;size:A4 landscape;}
 }
@@ -535,7 +551,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       </div>
     </div>
     <div class="tscroll">
-      <table>
+      <table class="tcompact">
         <thead><tr>
           <th style="text-align:left">Product</th>
           <th style="text-align:left">Line</th>
@@ -563,7 +579,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <div class="section-title">Production Database <span class="section-tag tag-labour">Jan–Mar 2026 Historical</span></div>
   <div class="tcard" style="margin-bottom:18px;">
     <div class="thead"><div><div class="ct">Line-by-Line Cost Breakdown — Production DB</div><div class="cs">Planned vs actual labour hours and output · Jan–Mar 2026</div></div></div>
-    <div class="tscroll"><table>
+    <div class="tscroll"><table class="tcompact">
       <thead><tr>
         <th>Code</th><th>Production Line</th><th>Days</th>
         <th>Plan Hrs</th><th>Act Hrs</th><th>Plan CS</th><th>Act CS</th><th>Eff%</th>
@@ -1481,8 +1497,8 @@ function renderHourlyRates() {
   document.getElementById('hr-tbody').innerHTML = products.map(p => {
     const varClass = p.variance > 0 ? 'color:var(--red)' : p.variance < 0 ? 'color:var(--green)' : '';
     return `<tr>
-      <td style="text-align:left;font-size:11px">${p.prodName}</td>
-      <td style="text-align:left;font-size:11px;color:var(--text2)">${p.lineName}</td>
+      <td style="text-align:left;font-size:11px" class="tname" title="${p.prodName}">${p.prodName}</td>
+      <td style="text-align:left;font-size:11px;color:var(--text2)" class="tname" title="${p.lineName}">${p.lineName}</td>
       <td style="text-align:right">${p.allocHrs.toFixed(2)}</td>
       <td style="text-align:right">${p.runHrs > 0 ? p.runHrs.toFixed(2)+'h' : '–'}</td>
       <td style="text-align:right">${p.stdHC||'–'}</td>
@@ -2013,7 +2029,7 @@ function renderTable(){
     const bc=util>115?'#c0392b':util>105?'#a05e00':'#1a7a3c';
     const stat=hv>15?'⚠ Over hrs':hv>5?'↑ Slightly over':hv<-10?'↓ Under hrs':'✓ On plan';
     const sc=hv>15?'var(--red)':hv>5?'var(--amber)':hv<-10?'var(--blue)':'var(--green)';
-    return`<tr><td>${code}</td><td>${lname(code)}</td><td>${l.active_days}</td><td>${l.planned_hrs.toLocaleString()}</td><td>${l.actual_hrs.toLocaleString()}</td><td>${l.planned_cs.toLocaleString()}</td><td>${l.actual_cs.toLocaleString()}</td><td>${eff}%</td><td>${fmtF(l.planned_cost)}</td><td style="font-weight:700">${fmtF(l.actual_cost)}</td><td><span class="badge ${v>0?'up':'dn'}">${v>=0?'+':''}${fmt(v)}</span></td><td><div class="pb"><div class="pbt"><div class="pbf" style="width:${Math.min(util,100)}%;background:${bc}"></div></div><span class="pcp">${hv>=0?'+':''}${hv.toFixed(1)}%</span></div></td><td style="color:${sc};font-size:11px;font-weight:600">${stat}</td></tr>`;
+    return`<tr><td>${code}</td><td class="tname" title="${lname(code)}">${lname(code)}</td><td>${l.active_days}</td><td>${l.planned_hrs.toLocaleString()}</td><td>${l.actual_hrs.toLocaleString()}</td><td>${l.planned_cs.toLocaleString()}</td><td>${l.actual_cs.toLocaleString()}</td><td>${eff}%</td><td>${fmtF(l.planned_cost)}</td><td style="font-weight:700">${fmtF(l.actual_cost)}</td><td><span class="badge ${v>0?'up':'dn'}">${v>=0?'+':''}${fmt(v)}</span></td><td><div class="pb"><div class="pbt"><div class="pbf" style="width:${Math.min(util,100)}%;background:${bc}"></div></div><span class="pcp">${hv>=0?'+':''}${hv.toFixed(1)}%</span></div></td><td style="color:${sc};font-size:11px;font-weight:600">${stat}</td></tr>`;
   });
   const totV=tAc-tPl;
   $('tbody').innerHTML=rows.join('');
