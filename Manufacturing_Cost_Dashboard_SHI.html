@@ -1315,11 +1315,12 @@ function getProdActuals(from, to) {
   const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
 
   const promoRunHrs = (lineAgg[PROMO_LINE] && lineAgg[PROMO_LINE].runHrs) || 0;
+  const promoKg     = (lineAgg[PROMO_LINE] && lineAgg[PROMO_LINE].actKg)  || 0;
 
   return {
     lineAgg, dailyAgg, productAgg,
     totalKg, totalCS, totalRunHrs, totalLabHrs,
-    blendedHr, promoRunHrs,
+    blendedHr, promoRunHrs, promoKg,
     labourCostTotal: totalRunHrs * blendedHr,
     labPerKg:  totalKg > 0 ? (totalRunHrs * blendedHr) / totalKg : 0,
     labPerCS:  totalCS > 0 ? (totalRunHrs * blendedHr) / totalCS : 0,
@@ -1583,8 +1584,9 @@ function calcCosts(from,to){
   const sdRows = SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
   const totalKg = prod && prod.totalKg > 0 ? prod.totalKg : sdRows.reduce((s,d)=>s+(d.kg_a||0),0);
   const totalCS = prod && prod.totalCS > 0 ? prod.totalCS : sdRows.reduce((s,d)=>s+(d.pcs_a||0),0);
+  const promoKg = prod ? (prod.promoKg||0) : 0;
 
-  return{labourCost,labourHrs,promoCost,promoHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,
+  return{labourCost,labourHrs,promoCost,promoHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,promoKg,
     totalCost:labourCost+promoCost+maintCost+elecCost,
     labPerKg:totalKg>0?labourCost/totalKg:0,
     maintPerKg:totalKg>0?maintCost/totalKg:0,
@@ -1609,7 +1611,7 @@ function renderKPIs(rows,c){
     {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
     {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
-    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days`:'–',bt:'neu'},
+    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu'},
   ];
   $('kgrid').innerHTML=kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
 }
