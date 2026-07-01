@@ -71,14 +71,14 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .setup-btn:hover{background:#0a6055;}
 
 /* MAIN */
-.main{padding:18px 24px 26px;max-width:1600px;margin:0 auto;}
+.main{padding:18px 24px 26px;max-width:1500px;margin:0 auto;}
 .dx-mark{position:fixed;left:0;right:0;bottom:0;z-index:90;display:flex;justify-content:center;align-items:center;
   height:16px;background:rgba(255,255,255,.94);border-top:1px solid var(--border);
   user-select:none;-webkit-user-select:none;}
 .dx-mark img{height:9px;width:auto;display:block;pointer-events:none;-webkit-user-drag:none;opacity:.8;}
 
 /* DASHBOARD LAYOUT — content + alert sidebar */
-.dash-layout{display:grid;grid-template-columns:1fr 220px;gap:20px;align-items:start;}
+.dash-layout{display:grid;grid-template-columns:1fr 300px;gap:20px;align-items:start;}
 .dash-content{min-width:0;}
 
 /* ALERTS — sticky right sidebar */
@@ -151,21 +151,18 @@ canvas{max-height:230px;}
 .egrid{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:18px;}
 
 /* TABLE */
-.tcard{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:clip;margin-bottom:18px;box-shadow:var(--shadow);}
+.tcard{background:#fff;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:18px;box-shadow:var(--shadow);}
 .thead{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2);}
-.tscroll{overflow:auto;max-height:420px;}
-/* Row-count guide: ~36px/row × 12 rows ≈ 432px — shows ~12 data rows before scroll */
+.tscroll{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;}
-th{background:var(--surface2);padding:9px 12px;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;
-  position:sticky;top:0;z-index:2;}
+th{background:var(--surface2);padding:9px 12px;font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
 th:first-child,th:nth-child(2){text-align:left;}
 td{padding:9px 12px;font-size:12px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--text);}
 td:first-child{text-align:left;font-weight:700;font-size:11px;color:var(--blue);}
 td:nth-child(2){text-align:left;color:var(--text2);font-size:11px;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:#f8faff;}
-tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border2);
-  position:sticky;bottom:0;z-index:2;}
+tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(--border2);}
 .pb{display:flex;align-items:center;gap:5px;justify-content:flex-end;}
 .pbt{width:60px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0;}
 .pbf{height:100%;border-radius:3px;}
@@ -191,11 +188,6 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   .alert-sidebar{position:static;max-height:none;box-shadow:none;border:1px solid #ccc;margin-bottom:14px;}
   .alert-zone{overflow:visible;}
   .print-hide-section>*{display:none!important;}
-  /* Remove scroll containers for full-table printing */
-  .tscroll{max-height:none!important;overflow:visible!important;}
-  #capex-table-wrap{max-height:none!important;overflow:visible!important;}
-  th{position:static!important;}
-  tfoot tr td{position:static!important;}
   @page{margin:12mm;size:A4 landscape;}
 }
 @media(max-width:768px){
@@ -447,8 +439,8 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   </div>
   <div class="tcard" id="maint-table-card" style="margin-bottom:18px;display:none;">
     <div class="thead"><div><div class="ct">Maintenance Cost Detail</div><div class="cs" id="maint-table-sub"></div></div></div>
-    <div class="tscroll"><table style="min-width:780px">
-      <thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Line / Area</th><th style="text-align:left">Cost Type</th><th style="text-align:left">Sub-Type</th><th>Amount (LKR)</th><th style="text-align:left">Supplier</th><th style="text-align:left;min-width:180px">Description</th></tr></thead>
+    <div class="tscroll"><table>
+      <thead><tr><th style="text-align:left">Date</th><th style="text-align:left">Line / Area</th><th style="text-align:left">Cost Type</th><th style="text-align:left">Sub-Type</th><th>Amount (LKR)</th><th style="text-align:left">Supplier</th><th style="text-align:left">Description</th></tr></thead>
       <tbody id="maint-tbody"></tbody>
       <tfoot id="maint-tfoot"></tfoot>
     </table></div>
@@ -480,15 +472,15 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <div class="capex-note">ℹ Info panel only — Capex depreciation not included in unit cost calculations</div>
     </div>
     <div class="capex-grid" id="capex-grid"></div>
-    <div id="capex-table-wrap" style="margin-top:12px;display:none;overflow:auto;max-height:380px;border-radius:6px;border:1px solid #e8d5a0;">
+    <div id="capex-table-wrap" style="margin-top:12px;display:none;">
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr style="background:#e8d5a0;">
-          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Asset</th>
-          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Line/Area</th>
-          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Cost (LKR)</th>
-          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Monthly Depr.</th>
-          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Net Book Value</th>
-          <th style="text-align:center;padding:6px 10px;font-size:10px;color:var(--gold-dk);position:sticky;top:0;background:#e8d5a0;z-index:2">Status</th>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Asset</th>
+          <th style="text-align:left;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Line/Area</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Cost (LKR)</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Monthly Depr.</th>
+          <th style="text-align:right;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Net Book Value</th>
+          <th style="text-align:center;padding:6px 10px;font-size:10px;color:var(--gold-dk)">Status</th>
         </tr></thead>
         <tbody id="capex-tbody"></tbody>
       </table>
@@ -543,10 +535,10 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       </div>
     </div>
     <div class="tscroll">
-      <table style="min-width:1100px">
+      <table>
         <thead><tr>
-          <th style="text-align:left;min-width:160px">Product</th>
-          <th style="text-align:left;min-width:140px">Line</th>
+          <th style="text-align:left">Product</th>
+          <th style="text-align:left">Line</th>
           <th>Alloc Hrs</th>
           <th>Run Time</th>
           <th>Std HC</th>
@@ -571,9 +563,9 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <div class="section-title">Production Database <span class="section-tag tag-labour">Jan–Mar 2026 Historical</span></div>
   <div class="tcard" style="margin-bottom:18px;">
     <div class="thead"><div><div class="ct">Line-by-Line Cost Breakdown — Production DB</div><div class="cs">Planned vs actual labour hours and output · Jan–Mar 2026</div></div></div>
-    <div class="tscroll"><table style="min-width:1000px">
+    <div class="tscroll"><table>
       <thead><tr>
-        <th>Code</th><th style="min-width:160px">Production Line</th><th>Days</th>
+        <th>Code</th><th>Production Line</th><th>Days</th>
         <th>Plan Hrs</th><th>Act Hrs</th><th>Plan CS</th><th>Act CS</th><th>Eff%</th>
         <th>Planned Cost</th><th>Actual Cost</th><th>Variance</th><th>Hrs Var%</th><th>Status</th>
       </tr></thead>
@@ -876,6 +868,7 @@ function calcDailyCost(role, hours, isSundayOrPoya) {
 }
 
 let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodSources={};
+const PROMO_LINE = 'PARL'; // Promo/Rework line — repacks already-produced FG; excluded from kg, cost tracked separately
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const lname=c=>LM[c]||c;
@@ -1060,7 +1053,25 @@ function getFilteredCapex(){
 }
 
 // Batch line codes excluded from CS volume (per project rules)
-const BATCH_LINE_CODES = new Set(['DPML','LBML','CRWL','PRL','FGL','PCL']);
+// PARL included: promo/rework repacks already-produced FG, so its CS/kg
+// would double-count against the original production and inflate Output Efficiency.
+const BATCH_LINE_CODES = new Set(['DPML','LBML','CRWL','PRL','FGL','PCL','PARL']);
+
+// Labour Allocation sheet stores full descriptive line names (e.g. "Promotions
+// and Reworks Line"), not short codes like PARL used in Production DB / LM map.
+// Match by substring so wording variants ("Promotion"/"Promotions",
+// "Rework"/"Reworks") don't cause a silent miss.
+function getPromoLineTotal(){
+  if(!allocData || !allocData.lineTotals) return null;
+  let hours=0, cost=0, found=false;
+  Object.entries(allocData.lineTotals).forEach(([line,val])=>{
+    const l = String(line).toLowerCase();
+    if(l===PROMO_LINE.toLowerCase() || (l.includes('promo') && l.includes('rework'))){
+      hours += (val.hours||0); cost += (val.cost||0); found=true;
+    }
+  });
+  return found ? {hours,cost} : null;
+}
 
 function getFiltered(){
   const from=$('f-from').value, to=$('f-to').value;
@@ -1245,7 +1256,10 @@ function getProdActuals(from, to) {
   const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
 
   // Batch lines excluded from volume (but included in cost)
-  const BATCH_LINES = ['DPML','LBML','CRWL','PRL','FGL','PCL','AFPL','BPL','CPL'];
+  // PARL = Promo/Rework line — repacks already-produced FG into promo packs,
+  // so its kg is not new production and must not double-count Total Kg Produced.
+  // Its labour cost is still tracked, but broken out separately (see calcCosts).
+  const BATCH_LINES = ['DPML','LBML','CRWL','PRL','FGL','PCL','AFPL','BPL','CPL','PARL'];
 
   const lineAgg = {}, dailyAgg = {}, productAgg = {};
   let totalKg = 0, totalCS = 0, totalRunHrs = 0, totalLabHrs = 0;
@@ -1300,10 +1314,12 @@ function getProdActuals(from, to) {
 
   const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
 
+  const promoRunHrs = (lineAgg[PROMO_LINE] && lineAgg[PROMO_LINE].runHrs) || 0;
+
   return {
     lineAgg, dailyAgg, productAgg,
     totalKg, totalCS, totalRunHrs, totalLabHrs,
-    blendedHr,
+    blendedHr, promoRunHrs,
     labourCostTotal: totalRunHrs * blendedHr,
     labPerKg:  totalKg > 0 ? (totalRunHrs * blendedHr) / totalKg : 0,
     labPerCS:  totalCS > 0 ? (totalRunHrs * blendedHr) / totalCS : 0,
@@ -1501,7 +1517,18 @@ function calcCosts(from,to){
   // Labour — use run time from prod DB if available, else allocation hours
   const labourHrs  = prod ? prod.totalRunHrs : (allocData&&allocData.filesFound>0 ? allocData.totalHours : 0);
   const blendedHr  = (prodSources.rates&&prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
-  const labourCost = allocData&&allocData.filesFound>0 ? allocData.totalCost : (labourHrs * blendedHr);
+  const labourCostAll = allocData&&allocData.filesFound>0 ? allocData.totalCost : (labourHrs * blendedHr);
+
+  // Promo / rework (PARL line) — labour cost is real and stays in the grand
+  // total, but it's pulled out of "Labour Cost" / per-kg metrics because the
+  // kg it touches was already counted when the FG was first produced.
+  // Prefer the ERP Labour Allocation line total (actual cost); fall back to
+  // Production DB run-time hours × blended rate if allocation data isn't loaded.
+  const promoLineAlloc = getPromoLineTotal();
+  const promoHrs  = promoLineAlloc ? (promoLineAlloc.hours||0) : (prod ? (prod.promoRunHrs||0) : 0);
+  const promoCost = promoLineAlloc ? (promoLineAlloc.cost||0)  : promoHrs * blendedHr;
+
+  const labourCost = Math.max(0, labourCostAll - promoCost);
 
   // Maintenance (filtered by line)
   const maintData = getFilteredEng();
@@ -1557,8 +1584,8 @@ function calcCosts(from,to){
   const totalKg = prod && prod.totalKg > 0 ? prod.totalKg : sdRows.reduce((s,d)=>s+(d.kg_a||0),0);
   const totalCS = prod && prod.totalCS > 0 ? prod.totalCS : sdRows.reduce((s,d)=>s+(d.pcs_a||0),0);
 
-  return{labourCost,labourHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,
-    totalCost:labourCost+maintCost+elecCost,
+  return{labourCost,labourHrs,promoCost,promoHrs,maintCost,maintFactory,maintMachinery,maintPreventive,maintBreakdown,elecKwh,elecCost,totalKg,
+    totalCost:labourCost+promoCost+maintCost+elecCost,
     labPerKg:totalKg>0?labourCost/totalKg:0,
     maintPerKg:totalKg>0?maintCost/totalKg:0,
     elecPerKg:totalKg>0?elecCost/totalKg:0,
@@ -1576,12 +1603,13 @@ function renderKPIs(rows,c){
   const pp=rows.reduce((s,d)=>s+d.pcs_p,0),pa=rows.reduce((s,d)=>s+d.pcs_a,0);
   const eff=pp>0?(pa/pp*100).toFixed(1):0;
   const kpis=[
-    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
+    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
     {c:'blue',l:'Labour Cost',v:fmt(c.labourCost),s:allocData&&allocData.totalHours>0?`${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:fmtKg(c.labPerKg),bt:'neu'},
+    {c:'purple',l:'Promo / Rework Cost',v:fmt(c.promoCost),s:c.promoHrs>0?`PARL line · ${c.promoHrs.toFixed(1)} hrs`:'No promo activity this range',b:'Excluded from kg produced',bt:'neu'},
     {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
     {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
-    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database',b:c.totalKg>0?`${rows.length} days`:'–',bt:'neu'},
+    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days`:'–',bt:'neu'},
   ];
   $('kgrid').innerHTML=kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
 }
@@ -1629,30 +1657,6 @@ function renderAlerts(rows,c){
   }
 }
 
-// ── ELECTRICITY RATE HELPER ───────────────────────────────────────────────────
-// Returns {rateByMonth: {"YYYY-MM"→rate}, fallbackRate} built from elecBill.
-// est_cost_lkr is an Excel formula that exports as 0 in CSV — always compute
-// cost here as KWh × rate instead of reading the formula column.
-function getElecRateMap(){
-  const MONTHS=['january','february','march','april','may','june',
-    'july','august','september','october','november','december'];
-  const rateByMonth={};
-  let fallbackRate=0;
-  if(elecBill.length>0){
-    elecBill.forEach(r=>{
-      const mName=String(r['month']||'').toLowerCase().trim();
-      const yr=parseInt(r['year'])||0;
-      const mNum=MONTHS.indexOf(mName)+1;
-      if(!mNum||!yr) return;
-      const rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
-      if(rate>0) rateByMonth[`${yr}-${String(mNum).padStart(2,'0')}`]=rate;
-    });
-    const last=elecBill[elecBill.length-1];
-    fallbackRate=parseFloat(String(last['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
-  }
-  return{rateByMonth,fallbackRate};
-}
-
 // ── RENDER TREND CHART ────────────────────────────────────────────────────────
 function renderTrend(rows,c){
   if(charts.trend)charts.trend.destroy();
@@ -1687,7 +1691,26 @@ function renderTrend(rows,c){
 
   // Build per-day Electricity cost: KWh × rate from the bill that covers that month.
   // est_cost_lkr is an Excel formula and doesn't survive CSV export reliably.
-  const {rateByMonth:billRateByMonth, fallbackRate} = getElecRateMap();
+  const MONTH_NAMES_TREND=['january','february','march','april','may','june',
+    'july','august','september','october','november','december'];
+  // Build a map: "YYYY-MM" → rate
+  const billRateByMonth={};
+  if(elecBill.length>0){
+    elecBill.forEach(r=>{
+      const mName=String(r['month']||'').toLowerCase().trim();
+      const yr=parseInt(r['year'])||0;
+      const mNum=MONTH_NAMES_TREND.indexOf(mName)+1;
+      if(!mNum||!yr) return;
+      const rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+      if(rate>0) billRateByMonth[`${yr}-${String(mNum).padStart(2,'0')}`]=rate;
+    });
+  }
+  // Fallback: last available rate
+  let fallbackRate = 0;
+  if(elecBill.length>0){
+    const lastBill = elecBill[elecBill.length-1];
+    fallbackRate = parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+  }
   const elecByDate = {};
   getFilteredElec().forEach(r=>{
     const d = normaliseDate(String(r['date']||'').trim());
@@ -1720,9 +1743,9 @@ function renderTrend(rows,c){
 // ── RENDER COST MIX PIE ───────────────────────────────────────────────────────
 function renderMix(c){
   if(charts.mix)charts.mix.destroy();
-  const data=[c.labourCost,c.maintCost,c.elecCost].filter(v=>v>0);
-  const lbls=['Labour','Maintenance','Electricity'].filter((_,i)=>[c.labourCost,c.maintCost,c.elecCost][i]>0);
-  const cols=['#1a5fa8','#c0392b','#e8a000'];
+  const data=[c.labourCost,c.promoCost,c.maintCost,c.elecCost].filter(v=>v>0);
+  const lbls=['Labour','Promo/Rework','Maintenance','Electricity'].filter((_,i)=>[c.labourCost,c.promoCost,c.maintCost,c.elecCost][i]>0);
+  const cols=['#1a5fa8','#7e57c2','#c0392b','#e8a000'];
   const mixCanvas = $('mixChart');
   const mixEmpty  = $('mixChartEmpty');
   if(!data.length||!mixCanvas){
@@ -1736,7 +1759,7 @@ function renderMix(c){
     type:'doughnut',
     data:{labels:lbls,datasets:[{data,backgroundColor:cols.slice(0,data.length),borderWidth:2,borderColor:'#fff'}]},
     options:{responsive:true,maintainAspectRatio:true,cutout:'58%',
-      plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:c=>`${c.label}: ${fmt(c.parsed)} (${(c.parsed/[c.labourCost,c.maintCost,c.elecCost].reduce((a,b)=>a+b,0)*100).toFixed(1)}%)`}}}
+      plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:c=>`${c.label}: ${fmt(c.parsed)} (${(c.parsed/data.reduce((a,b)=>a+b,0)*100).toFixed(1)}%)`}}}
     }
   });
 }
@@ -1862,16 +1885,10 @@ function renderElectricity(c){
   // Area meters
   const areaAgg={};
   const filteredElecData = getFilteredElec();
-  // Use shared rate map — est_cost_lkr is an Excel formula that exports as 0 in CSV
-  const {rateByMonth, fallbackRate} = getElecRateMap();
   filteredElecData.forEach(r=>{
     const area=r['factory_area']||r['area']||'Unknown';
     const kwh=parseFloat(r['kwh_consumed']||0)||0;
-    // Compute cost: KWh × rate for that month (mirrors renderTrend logic)
-    const nd=normaliseDate(String(r['date']||'').trim());
-    const ym=nd?nd.slice(0,7):'';
-    const rate=(ym&&rateByMonth[ym])||fallbackRate;
-    const cost=kwh*rate;
+    const cost=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
     const kg=parseFloat(r['production_output_kg']||0)||0;
     if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
     areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
@@ -1880,9 +1897,8 @@ function renderElectricity(c){
   const areas=Object.keys(areaAgg);
   $('elec-meters').innerHTML=areas.length>0?areas.map(a=>{
     const d=areaAgg[a];
-    const costLine=d.cost>0?fmtF(d.cost):(fallbackRate===0?'No rate configured':'–');
-    const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'';
-    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${costLine}</div>${eff?`<div class="meter-eff">${eff} KWh/kg</div>`:''}</div>`;
+    const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'–';
+    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
   }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
 
   // Daily KWh trend
