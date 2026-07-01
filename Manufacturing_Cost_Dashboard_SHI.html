@@ -1602,10 +1602,10 @@ function renderKPIs(rows,c){
   const tp=rows.reduce((s,d)=>s+d.pc,0),ta=rows.reduce((s,d)=>s+d.ac,0);
   const pp=rows.reduce((s,d)=>s+d.pcs_p,0),pa=rows.reduce((s,d)=>s+d.pcs_a,0);
   const eff=pp>0?(pa/pp*100).toFixed(1):0;
+  const labourCostAll = c.labourCost + c.promoCost; // production + promo combined
   const kpis=[
     {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
-    {c:'blue',l:'Labour Cost',v:fmt(c.labourCost),s:allocData&&allocData.totalHours>0?`${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:fmtKg(c.labPerKg),bt:'neu'},
-    {c:'purple',l:'Promo / Rework Cost',v:fmt(c.promoCost),s:c.promoHrs>0?`PARL line · ${c.promoHrs.toFixed(1)} hrs`:'No promo activity this range',b:'Excluded from kg produced',bt:'neu'},
+    {c:'blue',l:'Labour Cost',v:fmt(labourCostAll),s:allocData&&allocData.totalHours>0?`${allocData.employees} employees · ${allocData.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:labourCostAll>0?`Production: ${fmt(c.labourCost)} · Promo/Rework: ${fmt(c.promoCost)}`:'–',bt:'neu'},
     {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
     {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
