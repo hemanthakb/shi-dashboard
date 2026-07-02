@@ -1058,6 +1058,30 @@ function normaliseDate(d, preferFormat){
   if(m2) return m2[3]+'-'+m2[2].padStart(2,'0')+'-'+m2[1].padStart(2,'0');
   return d;
 }
+
+// ── ELECTRICITY RATE LOOKUP ───────────────────────────────────────────────────
+// Est. Cost (LKR) in the Electricity Daily sheet is an Excel formula column
+// that always exports blank/zero via CSV, so cost must be derived as
+// KWh × the rate from whichever month's bill (Electricity_Bill sheet) covers
+// that date. Shared by calcCosts() (period totals) and renderElectricity()
+// (per-area cards), so both use the same source of truth.
+const MONTH_NAMES_ELEC=['january','february','march','april','may','june',
+  'july','august','september','october','november','december'];
+function getElecRateForDate(dateStr){
+  const nd = normaliseDate(dateStr,'MD');
+  if(!nd || !elecBill || elecBill.length===0) return 0;
+  const [y,m] = nd.split('-').map(Number);
+  let rate=0;
+  elecBill.forEach(r=>{
+    const mName=String(r['month']||'').toLowerCase().trim();
+    const yr=parseInt(r['year'])||0;
+    const mNum=MONTH_NAMES_ELEC.indexOf(mName)+1;
+    if(mNum===m && yr===y){
+      rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+    }
+  });
+  return rate;
+}
 // ── LINE FILTER HELPER ────────────────────────────────────────────────────────
 function getLineFilter(){ return ($('f-line')||{value:'all'}).value || 'all'; }
 
@@ -2000,7 +2024,9 @@ function renderElectricity(c){
   filteredElecData.forEach(r=>{
     const area=r['factory_area']||r['area']||'Unknown';
     const kwh=parseFloat(r['kwh_consumed']||0)||0;
-    const cost=parseFloat(String(r['est_cost_lkr']||r['est_cost']||'0').replace(/[^0-9.]/g,''))||0;
+    // est_cost_lkr is an Excel formula and doesn't survive CSV export — derive
+    // cost from KWh × the bill rate for that row's month instead (see calcCosts).
+    const cost=kwh*getElecRateForDate(r['date']);
     const kg=parseFloat(r['production_output_kg']||0)||0;
     if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
     areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
