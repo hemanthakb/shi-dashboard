@@ -969,10 +969,24 @@ async function fetchCSV(url){
       }
     }
     const hdrs=parseRow(lines[headerIdx]).map(h=>h.replace(/"/g,'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
-    console.log('CSV hdrs['+headerIdx+']',url.slice(-25),hdrs.slice(0,6).join(','));
+    // Guarantee every header key is unique. Sheets sometimes have a blank
+    // header cell (e.g. an unlabeled "Stage" column) or two columns that
+    // share the same label (e.g. two columns both named "Line"). Without
+    // this, building {header: value} objects below would silently collide
+    // on those keys, dropping a whole column and shifting every subsequent
+    // vals[N] positional read in the app by one — the cause of the Sources
+    // sheet's Standard LKR/CS coming out wrong for every product.
+    const seenHdr={};
+    const uniqHdrs=hdrs.map((h,i)=>{
+      const key=h||`col${i}`;
+      if(seenHdr[key]===undefined){seenHdr[key]=0;return key;}
+      seenHdr[key]++;
+      return `${key}_${seenHdr[key]}`;
+    });
+    console.log('CSV hdrs['+headerIdx+']',url.slice(-25),uniqHdrs.slice(0,6).join(','));
     return lines.slice(headerIdx+1).map(line=>{
       const vals=parseRow(line);const obj={};
-      hdrs.forEach((h,i)=>{obj[h]=vals[i]?vals[i].replace(/"/g,'').trim():'';});
+      uniqHdrs.forEach((h,i)=>{obj[h]=vals[i]?vals[i].replace(/"/g,'').trim():'';});
       return obj;
     }).filter(r=>Object.values(r).filter(v=>v!=='').length>=1);
   }catch(e){console.error('CSV error:',url.slice(-30),e);return[];}
