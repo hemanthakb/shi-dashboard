@@ -1068,7 +1068,7 @@ function normaliseDate(d, preferFormat){
 const MONTH_NAMES_ELEC=['january','february','march','april','may','june',
   'july','august','september','october','november','december'];
 function getElecRateForDate(dateStr){
-  const nd = normaliseDate(dateStr,'MD');
+  const nd = normaliseDate(dateStr); // Electricity Daily uses plain DD/MM/YYYY text — default 'DM'
   if(!nd || !elecBill || elecBill.length===0) return 0;
   const [y,m] = nd.split('-').map(Number);
   let rate=0;
