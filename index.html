@@ -830,22 +830,28 @@ function buildProdStandards(srcRows) {
 
   const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
 
-  // Many products have more than one production stage (e.g. Counting + Packing,
-  // Filling + Packing, Wrapping + Finishing). Collect ALL stage rows per product
-  // first — do not overwrite one stage with another.
+  // Many products have more than one production-stage row (e.g. Counting +
+  // Packing, Filling + Packing). Collect ALL rows per product first — do not
+  // overwrite one stage with another.
+  //
+  // CONFIRMED live column layout (from console diagnostic, 2026-07-03 — the
+  // live Sources sheet has NO separate "Stage" text column, unlike the sample
+  // template):
+  //   vals[0]=blank, vals[1]=FG SKU (product), vals[2]=Labor (headcount),
+  //   vals[3]=Hr CS/Batch (CS/hr), vals[4]=Shift Target CS/kg (unused),
+  //   vals[5]=Per CS/Batch kg (kg/CS), vals[6]=Line
+  // Named keys (post CSV-header-normalisation) are the primary source; the
+  // positional fallbacks below match that same live layout.
   const staged = {};
   srcRows.forEach((r) => {
     const vals = Object.values(r);
-    // Sources sheet: col B=product name, C=stage, D=headcount, E=CS/hr, H=kg/CS, K=line
-    // After CSV parsing with correct headers these become cols 1,2,3,4,7,10
-    let product='', stage='', headcount=0, csPerHr=0, kgPerCS=0, line='';
+    let product='', headcount=0, csPerHr=0, kgPerCS=0, line='';
 
     product   = String(r['fg_sku']||r['product_sku']||r['product']||vals[1]||'').trim();
-    stage     = String(r['stage']||vals[2]||'').trim();
-    headcount = parseFloat(r['headcount']||r['no_of_labour']||vals[3]||0)||0;
-    csPerHr   = parseFloat(r['cs_hr']||r['hr_cs_batch']||vals[4]||0)||0;
-    kgPerCS   = parseFloat(r['kg_cs']||r['per_cs_kg']||vals[7]||0)||0;
-    line      = String(r['line']||r['line_code']||vals[10]||'').trim();
+    headcount = parseFloat(r['labor']||r['headcount']||r['no_of_labour']||vals[2]||0)||0;
+    csPerHr   = parseFloat(r['hr_csbatch']||r['cs_hr']||r['hr_cs_batch']||vals[3]||0)||0;
+    kgPerCS   = parseFloat(r['per_cs_or_batch_kg']||r['kg_cs']||r['per_cs_kg']||vals[5]||0)||0;
+    line      = String(r['line']||r['line_code']||vals[6]||'').trim();
 
     // Skip non-product rows
     if(!product || product.length < 3) return;
@@ -853,7 +859,7 @@ function buildProdStandards(srcRows) {
     if(headcount === 0 && csPerHr === 0) return;
 
     if(!staged[product]) staged[product] = [];
-    staged[product].push({ headcount, csPerHr, kgPerCS, line, stage });
+    staged[product].push({ headcount, csPerHr, kgPerCS, line });
   });
 
   // Combine stages per product: sum the labour cost of every stage (making,
@@ -870,7 +876,6 @@ function buildProdStandards(srcRows) {
       csPerHr:    finalStage.csPerHr,
       kgPerCS:    finalStage.kgPerCS,
       line:       finalStage.line,
-      stage:      finalStage.stage,
       stageCount: stages.length,
       totalStageCost,
     };
