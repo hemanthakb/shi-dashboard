@@ -818,7 +818,7 @@ let PROD_STANDARDS = {};  // populated from sources sheet on connect
 function buildProdStandards(srcRows) {
   PROD_STANDARDS = {};
   if(!srcRows || srcRows.length === 0) return;
-  
+
   console.log('srcRows count:', srcRows.length);
   if(srcRows.length > 0) {
     console.log('srcRow[0] keys:', Object.keys(srcRows[0]).slice(0,6).join(', '));
@@ -828,14 +828,18 @@ function buildProdStandards(srcRows) {
     console.log('srcRow[5] vals:', Object.values(srcRows[5]).slice(0,8).join(' | '));
   }
 
-  srcRows.forEach((r, idx) => {
+  const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
+
+  // Many products have more than one production stage (e.g. Counting + Packing,
+  // Filling + Packing, Wrapping + Finishing). Collect ALL stage rows per product
+  // first — do not overwrite one stage with another.
+  const staged = {};
+  srcRows.forEach((r) => {
     const vals = Object.values(r);
-    // Try to find product name - it's a long descriptive string
     // Sources sheet: col B=product name, C=stage, D=headcount, E=CS/hr, H=kg/CS, K=line
     // After CSV parsing with correct headers these become cols 1,2,3,4,7,10
     let product='', stage='', headcount=0, csPerHr=0, kgPerCS=0, line='';
-    
-    // Try named keys first
+
     product   = String(r['fg_sku']||r['product_sku']||r['product']||vals[1]||'').trim();
     stage     = String(r['stage']||vals[2]||'').trim();
     headcount = parseFloat(r['headcount']||r['no_of_labour']||vals[3]||0)||0;
@@ -848,10 +852,30 @@ function buildProdStandards(srcRows) {
     if(product.toLowerCase().includes('feed') || product.toLowerCase().includes('fg sku')) return;
     if(headcount === 0 && csPerHr === 0) return;
 
-    if(!PROD_STANDARDS[product] || csPerHr > 0) {
-      PROD_STANDARDS[product] = { headcount, csPerHr, kgPerCS, line, stage };
-    }
+    if(!staged[product]) staged[product] = [];
+    staged[product].push({ headcount, csPerHr, kgPerCS, line, stage });
   });
+
+  // Combine stages per product: sum the labour cost of every stage (making,
+  // filling, counting, etc.), divide by the FINAL stage's CS/hr — the stage
+  // where finished-goods CS is actually counted (wrapping/packing/finishing,
+  // whichever comes last in the sheet for that product). This matches the
+  // confirmed formula: (making cost + wrapping cost) ÷ wrapping CS.
+  Object.entries(staged).forEach(([product, stages]) => {
+    const totalStageCost = stages.reduce((s,st)=>s+(st.headcount*blendedHr),0);
+    const totalHeadcount = stages.reduce((s,st)=>s+st.headcount,0);
+    const finalStage = stages[stages.length-1];
+    PROD_STANDARDS[product] = {
+      headcount:  totalHeadcount,
+      csPerHr:    finalStage.csPerHr,
+      kgPerCS:    finalStage.kgPerCS,
+      line:       finalStage.line,
+      stage:      finalStage.stage,
+      stageCount: stages.length,
+      totalStageCost,
+    };
+  });
+
   console.log('PROD_STANDARDS built:', Object.keys(PROD_STANDARDS).length, 'products');
   if(Object.keys(PROD_STANDARDS).length > 0) {
     const k = Object.keys(PROD_STANDARDS)[0];
@@ -1510,11 +1534,14 @@ function renderHourlyRates() {
     const actuals  = prodActuals[prodName] || { runHrs:0, actCS:0, actKg:0 };
     const labCost  = Math.round(alloc.hours * blendedHr);
 
-    // Standard from sources sheet
+    // Standard from sources sheet — totalStageCost already sums every
+    // production stage's labour cost (e.g. Counting + Packing), so it's
+    // used directly instead of re-deriving from a single headcount.
     const std      = PROD_STANDARDS[prodName] || {};
     const stdCShr  = std.csPerHr || 0;
     const stdHC    = std.headcount || 0;
-    const stdCostPerCS = stdCShr > 0 ? Math.round((stdHC * blendedHr) / stdCShr * 100) / 100 : 0;
+    const stdStageCost = std.totalStageCost != null ? std.totalStageCost : (stdHC * blendedHr);
+    const stdCostPerCS = stdCShr > 0 ? Math.round(stdStageCost / stdCShr * 100) / 100 : 0;
 
     // Actual cost per CS using total allocated hours
     const actCostPerCS = actuals.actCS > 0 ? Math.round(labCost / actuals.actCS * 100) / 100 : 0;
