@@ -1503,8 +1503,13 @@ function renderHourlyRates() {
     renderHourlyRates._lastGlobalLf = globalLf;
     if(!hrLineManualOverride){
       const globalName = globalLf!=='all' ? (LM[globalLf]||globalLf) : 'all';
-      const optionExists = [...lineSelectEarly.options].some(o=>o.value===globalName);
-      lineSelectEarly.value = optionExists ? globalName : 'all';
+      // Match case/whitespace-insensitively — the ERP's actual line text can
+      // differ slightly from the hardcoded LM name (e.g. trailing space,
+      // different capitalisation), and an exact === match silently falls
+      // back to "all" (no filter applied) whenever that happens.
+      const norm = s => String(s||'').toLowerCase().trim();
+      const matchedOpt = [...lineSelectEarly.options].find(o => norm(o.value) === norm(globalName));
+      lineSelectEarly.value = matchedOpt ? matchedOpt.value : 'all';
     }
   }
 
