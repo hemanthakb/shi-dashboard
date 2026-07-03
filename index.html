@@ -1080,6 +1080,14 @@ function getElecRateForDate(dateStr){
       rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
     }
   });
+  // Fallback: no bill row matched this exact month/year (missing entry, typo,
+  // or a month not yet billed) — use the most recent available bill rate
+  // instead of silently returning 0. Same fallback pattern already used by
+  // calcCosts() and the trend chart for the same reason.
+  if(rate===0){
+    const lastBill=elecBill[elecBill.length-1];
+    rate=parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+  }
   return rate;
 }
 // ── LINE FILTER HELPER ────────────────────────────────────────────────────────
