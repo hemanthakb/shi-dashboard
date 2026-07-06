@@ -2090,13 +2090,26 @@ function renderElectricity(c){
     return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
   }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
 
-  // Daily KWh trend
+  // Daily KWh trend (total across areas/filtered line — not split by area)
   if(charts.elecTrend)charts.elecTrend.destroy();
   if(filteredElecData.length > 0){
     const dateAgg={};
-    filteredElecData.forEach(r=>{const d=r['date']||'';const kwh=parseFloat(r['kwh_consumed']||0)||0;if(!dateAgg[d])dateAgg[d]=0;dateAgg[d]+=kwh;});
+    filteredElecData.forEach(r=>{
+      // Electricity Daily dates are raw DD/MM/YYYY text — normalise to
+      // YYYY-MM-DD first so keys sort chronologically, not alphabetically
+      // (otherwise "6/6/2026" sorts before "15/6/2026" as plain text).
+      const d=normaliseDate(r['date']||'');
+      if(!d) return;
+      const kwh=parseFloat(r['kwh_consumed']||0)||0;
+      if(!dateAgg[d])dateAgg[d]=0;
+      dateAgg[d]+=kwh;
+    });
     const eDates=Object.keys(dateAgg).sort();
-    charts.elecTrend=new Chart($('elecTrendChart').getContext('2d'),{type:'line',data:{labels:eDates.map(d=>d.slice(5)),datasets:[{label:'KWh',data:eDates.map(d=>dateAgg[d]),borderColor:'#e8a000',backgroundColor:'rgba(232,163,25,.1)',fill:true,tension:.35,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(1)+' KWh'}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#8b92a5',maxTicksLimit:12}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+' KWh'}}}}});
+    const dayLabel=d=>{
+      const [y,m,dd]=d.split('-').map(Number);
+      return new Date(y,m-1,dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    };
+    charts.elecTrend=new Chart($('elecTrendChart').getContext('2d'),{type:'line',data:{labels:eDates.map(dayLabel),datasets:[{label:'KWh',data:eDates.map(d=>dateAgg[d]),borderColor:'#e8a000',backgroundColor:'rgba(232,163,25,.1)',fill:true,tension:.35,pointRadius:2,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.parsed.y.toFixed(1)+' KWh'}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#8b92a5',maxTicksLimit:12}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+' KWh'}}}}});
   }
 
   // Monthly bill tracker
