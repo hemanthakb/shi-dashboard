@@ -1123,6 +1123,14 @@ function getElecRateForDate(dateStr){
       rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
     }
   });
+  // No bill published yet for that exact month (e.g. current month's bill
+  // hasn't arrived) — fall back to the most recent available bill's rate,
+  // same fallback calcCosts() uses for the top-level Electricity Cost KPI,
+  // so area cards and the KPI total stay consistent.
+  if(rate===0){
+    const lastBill=elecBill[elecBill.length-1];
+    rate=parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+  }
   return rate;
 }
 // ── LINE FILTER HELPER ────────────────────────────────────────────────────────
