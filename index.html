@@ -206,17 +206,15 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   .print-hide-section>*{display:none!important;}
   @page{margin:12mm;size:A4 landscape;}
 }
-@media(max-width:1100px){
-  .dash-layout{grid-template-columns:1fr;}
-  .alert-sidebar{position:static;max-height:none;order:-1;}
-  .alert-zone{max-height:300px;}
-}
 @media(max-width:768px){
   .cgrid,.egrid,.otgrid{grid-template-columns:1fr;}
   .kgrid{grid-template-columns:repeat(2,1fr);}
   .main{padding:10px 12px;}
   .hdr{padding:0 14px;}
   .filters{padding:8px 12px;}
+  .dash-layout{grid-template-columns:1fr;}
+  .alert-sidebar{position:static;max-height:none;order:-1;}
+  .alert-zone{max-height:300px;}
 }
 
 
@@ -820,7 +818,7 @@ let PROD_STANDARDS = {};  // populated from sources sheet on connect
 function buildProdStandards(srcRows) {
   PROD_STANDARDS = {};
   if(!srcRows || srcRows.length === 0) return;
-
+  
   console.log('srcRows count:', srcRows.length);
   if(srcRows.length > 0) {
     console.log('srcRow[0] keys:', Object.keys(srcRows[0]).slice(0,6).join(', '));
@@ -830,56 +828,49 @@ function buildProdStandards(srcRows) {
     console.log('srcRow[5] vals:', Object.values(srcRows[5]).slice(0,8).join(' | '));
   }
 
-  const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
-
-  // Many products have more than one production-stage row (e.g. Counting +
-  // Packing, Filling + Packing). Collect ALL rows per product first — do not
-  // overwrite one stage with another.
-  //
-  // CONFIRMED live column layout (from console diagnostic, 2026-07-03 — the
-  // live Sources sheet has NO separate "Stage" text column, unlike the sample
-  // template):
-  //   vals[0]=blank, vals[1]=FG SKU (product), vals[2]=Labor (headcount),
-  //   vals[3]=Hr CS/Batch (CS/hr), vals[4]=Shift Target CS/kg (unused),
-  //   vals[5]=Per CS/Batch kg (kg/CS), vals[6]=Line
-  // Named keys (post CSV-header-normalisation) are the primary source; the
-  // positional fallbacks below match that same live layout.
-  const staged = {};
+  // Pass 1: group every stage row by product name, in sheet order. Many
+  // products (soap bars, Tharu pieces, air fresheners...) have 2-3 stage
+  // rows -- e.g. Wrapping+Packing, or Cutting+Stamping+Packing -- and
+  // upstream stages often carry 0 headcount/CS-hr of their own (that labour
+  // is folded into the final stage's rate). Keeping every row per product
+  // (instead of overwriting) lets us combine them correctly below.
+  const grouped = {}; // product -> [{stage,headcount,csPerHr,kgPerCS,line}, ...]
   srcRows.forEach((r) => {
     const vals = Object.values(r);
-    let product='', headcount=0, csPerHr=0, kgPerCS=0, line='';
-
-    product   = String(r['fg_sku']||r['product_sku']||r['product']||vals[1]||'').trim();
-    headcount = parseFloat(r['labor']||r['headcount']||r['no_of_labour']||vals[2]||0)||0;
-    csPerHr   = parseFloat(r['hr_csbatch']||r['cs_hr']||r['hr_cs_batch']||vals[3]||0)||0;
-    kgPerCS   = parseFloat(r['per_cs_or_batch_kg']||r['kg_cs']||r['per_cs_kg']||vals[5]||0)||0;
-    line      = String(r['line']||r['line_code']||vals[6]||'').trim();
+    // Sources sheet: col B=product name, C=stage, D=headcount, E=CS/hr, H=kg/CS, K=line
+    // After CSV parsing with correct headers these become cols 1,2,3,4,7,10
+    const product   = String(r['fg_sku']||r['product_sku']||r['product']||vals[1]||'').trim();
+    const stage     = String(r['stage']||vals[2]||'').trim();
+    const headcount = parseFloat(r['headcount']||r['no_of_labour']||vals[3]||0)||0;
+    const csPerHr   = parseFloat(r['cs_hr']||r['hr_cs_batch']||vals[4]||0)||0;
+    const kgPerCS   = parseFloat(r['kg_cs']||r['per_cs_kg']||vals[7]||0)||0;
+    const line      = String(r['line']||r['line_code']||vals[10]||'').trim();
 
     // Skip non-product rows
     if(!product || product.length < 3) return;
     if(product.toLowerCase().includes('feed') || product.toLowerCase().includes('fg sku')) return;
-    if(headcount === 0 && csPerHr === 0) return;
+    // Skip rows that carry no usable data at all (fully blank sheet padding)
+    if(headcount === 0 && csPerHr === 0 && kgPerCS === 0 && !line) return;
 
-    if(!staged[product]) staged[product] = [];
-    staged[product].push({ headcount, csPerHr, kgPerCS, line });
+    if(!grouped[product]) grouped[product] = [];
+    grouped[product].push({ stage, headcount, csPerHr, kgPerCS, line });
   });
 
-  // Combine stages per product: sum the labour cost of every stage (making,
-  // filling, counting, etc.), divide by the FINAL stage's CS/hr — the stage
-  // where finished-goods CS is actually counted (wrapping/packing/finishing,
-  // whichever comes last in the sheet for that product). This matches the
-  // confirmed formula: (making cost + wrapping cost) ÷ wrapping CS.
-  Object.entries(staged).forEach(([product, stages]) => {
-    const totalStageCost = stages.reduce((s,st)=>s+(st.headcount*blendedHr),0);
-    const totalHeadcount = stages.reduce((s,st)=>s+st.headcount,0);
-    const finalStage = stages[stages.length-1];
+  // Pass 2: combine stages into one standard per product. Total labour cost
+  // for the product = sum of every stage's headcount (all stages run at the
+  // same blended LKR/hr), and that total is produced at the rate of the
+  // FINAL stage (e.g. Packing) -- so stdCost/CS = (Sum headcount x LKR/hr)
+  // / final stage's CS/hr. Single-stage products fall out of this unchanged.
+  Object.entries(grouped).forEach(([product, stages]) => {
+    const totalHeadcount = stages.reduce((s,x) => s + x.headcount, 0);
+    const final = stages[stages.length - 1];
     PROD_STANDARDS[product] = {
-      headcount:  totalHeadcount,
-      csPerHr:    finalStage.csPerHr,
-      kgPerCS:    finalStage.kgPerCS,
-      line:       finalStage.line,
+      headcount: totalHeadcount,
+      csPerHr:   final.csPerHr,
+      kgPerCS:   final.kgPerCS,
+      line:      final.line,
+      stage:     final.stage,
       stageCount: stages.length,
-      totalStageCost,
     };
   });
 
@@ -1111,14 +1102,6 @@ function getElecRateForDate(dateStr){
       rate=parseFloat(String(r['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
     }
   });
-  // Fallback: no bill row matched this exact month/year (missing entry, typo,
-  // or a month not yet billed) — use the most recent available bill rate
-  // instead of silently returning 0. Same fallback pattern already used by
-  // calcCosts() and the trend chart for the same reason.
-  if(rate===0){
-    const lastBill=elecBill[elecBill.length-1];
-    rate=parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
-  }
   return rate;
 }
 // ── LINE FILTER HELPER ────────────────────────────────────────────────────────
@@ -1505,13 +1488,8 @@ function renderHourlyRates() {
     renderHourlyRates._lastGlobalLf = globalLf;
     if(!hrLineManualOverride){
       const globalName = globalLf!=='all' ? (LM[globalLf]||globalLf) : 'all';
-      // Match case/whitespace-insensitively — the ERP's actual line text can
-      // differ slightly from the hardcoded LM name (e.g. trailing space,
-      // different capitalisation), and an exact === match silently falls
-      // back to "all" (no filter applied) whenever that happens.
-      const norm = s => String(s||'').toLowerCase().trim();
-      const matchedOpt = [...lineSelectEarly.options].find(o => norm(o.value) === norm(globalName));
-      lineSelectEarly.value = matchedOpt ? matchedOpt.value : 'all';
+      const optionExists = [...lineSelectEarly.options].some(o=>o.value===globalName);
+      lineSelectEarly.value = optionExists ? globalName : 'all';
     }
   }
 
@@ -1546,14 +1524,11 @@ function renderHourlyRates() {
     const actuals  = prodActuals[prodName] || { runHrs:0, actCS:0, actKg:0 };
     const labCost  = Math.round(alloc.hours * blendedHr);
 
-    // Standard from sources sheet — totalStageCost already sums every
-    // production stage's labour cost (e.g. Counting + Packing), so it's
-    // used directly instead of re-deriving from a single headcount.
+    // Standard from sources sheet
     const std      = PROD_STANDARDS[prodName] || {};
     const stdCShr  = std.csPerHr || 0;
     const stdHC    = std.headcount || 0;
-    const stdStageCost = std.totalStageCost != null ? std.totalStageCost : (stdHC * blendedHr);
-    const stdCostPerCS = stdCShr > 0 ? Math.round(stdStageCost / stdCShr * 100) / 100 : 0;
+    const stdCostPerCS = stdCShr > 0 ? Math.round((stdHC * blendedHr) / stdCShr * 100) / 100 : 0;
 
     // Actual cost per CS using total allocated hours
     const actCostPerCS = actuals.actCS > 0 ? Math.round(labCost / actuals.actCS * 100) / 100 : 0;
