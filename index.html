@@ -757,6 +757,11 @@ function parseLabourCSV(rows, from, to) {
   // Rule (confirmed with user): per employee, per day, hours above 9 on a
   // normal day are OT at 1.5x. On a Sunday or Poya day, the ENTIRE day's
   // hours are at 2.0x (DOT) instead of the normal 1.0x/1.5x split.
+  // Saturday spillover rule (confirmed with user): a Saturday shift logged
+  // as 18+ hrs has run past midnight into Sunday, so hours beyond 18 are
+  // actually Sunday hours and billed at 2.0x DOT; the first 18 hrs still
+  // follow the normal 9hr-normal/9hr-OT split. E.g. 24 hrs on a Saturday =
+  // 9 normal + 9 OT + 6 DOT.
   // This requires per-employee-per-day totals (employeeDayTotals), not just
   // an aggregate hours-vs-capacity estimate.
   const blendedHr = EMPLOYMENT_RATES.blendedHr;
@@ -765,9 +770,25 @@ function parseLabourCSV(rows, from, to) {
 
   Object.values(employeeDayTotals).forEach(({date, hours}) => {
     if(hours <= 0) return;
+    const d = new Date(date + 'T00:00:00');
+    const isSaturday = d.getDay() === 6;
     if(isSundayOrPoya(date)) {
       dotHours += hours;
       dotCost  += hours * blendedHr * 2.0;
+    } else if(isSaturday && hours >= 18) {
+      // Saturday shift running 18+ hrs has spilled past midnight into Sunday —
+      // hours beyond 18 actually happened on Sunday (a DOT day), so they're
+      // billed at 2.0x. The first 18 hrs still follow the normal 9hr-normal /
+      // 9hr-OT split (confirmed with user).
+      const normalPart = 9;
+      const otPart      = 9;
+      const dotPart     = hours - 18;
+      normalHours += normalPart;
+      otHours     += otPart;
+      dotHours    += dotPart;
+      normalCost  += normalPart * blendedHr;
+      otCost      += otPart * blendedHr * 1.5;
+      dotCost     += dotPart * blendedHr * 2.0;
     } else if(hours > 9) {
       const normalPart = 9;
       const otPart      = hours - 9;
@@ -1942,7 +1963,7 @@ function renderLabour(c){
     $('labour-kpis').innerHTML=`
       <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
       <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div></div>
-      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days</div></div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h</div></div>
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>`;
   } else {
     // No live data — show placeholder
