@@ -1295,7 +1295,11 @@ async function connectAll(){
   engData   = filterByDate(engRows,'date',from,to);
   elecDaily = filterByDate(elecDRows,'date',from,to);
   elecBill  = elecBRows; // all months
-  capexData = capRows;
+  // Capex Register: filter to assets purchased within the selected date range,
+  // same as Engineering Costs / Electricity Daily. Purchase Date is plain
+  // DD/MM/YYYY text entered by the team (like the other Engineering-tab sheets),
+  // so use the default 'DM' preferFormat.
+  capexData = filterByDate(capRows,'purchase_date',from,to);
   // Debug all sources
   
   // Production DB — use positional columns (structure is fixed)
@@ -2157,7 +2161,7 @@ function renderCapex(){
   const active   =filteredCapex.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
 
   $('capex-grid').innerHTML=`
-    <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${capexData.length}</div><div class="capex-stat-sub">${active} active</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${filteredCapex.length}</div><div class="capex-stat-sub">${active} active</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Total Capex Value</div><div class="capex-stat-val">${fmt(totalCost)}</div><div class="capex-stat-sub">Original cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Monthly Depreciation</div><div class="capex-stat-val">${fmt(totalDepr)}</div><div class="capex-stat-sub">Not in unit cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
