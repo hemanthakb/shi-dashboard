@@ -106,7 +106,7 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .abar.blue .atitle{color:var(--blue);}
 
 /* KPIs */
-.kgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:14px;}
+.kgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:14px;}
 .kpi{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;box-shadow:var(--shadow);border-top:3px solid;}
 .kpi.gold{border-top-color:var(--gold);}
 .kpi.blue{border-top-color:var(--blue);}
@@ -193,7 +193,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   .filters,.hdr-r,.setup-panel,.live-bar,.no-print{display:none!important;}
   .hdr{position:relative;border-bottom:2px solid #b8860b;}
   body{background:#fff;}
-  .kgrid{grid-template-columns:repeat(7,1fr);}
+  .kgrid{grid-template-columns:repeat(6,1fr);}
   .cgrid,.egrid{grid-template-columns:1fr 1fr;}
   .otgrid{grid-template-columns:repeat(3,1fr);}
   canvas{max-height:150px!important;}
@@ -338,6 +338,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <option value="capex">Capital Expenditure</option>
       <option value="hourly">Hourly Labour Cost</option>
       <option value="production">Production Database</option>
+      <option value="wip">WIP Inventory</option>
     </select>
     <button class="btn btn-blue no-print" onclick="printSection()">🖨 Print</button>
   </div>
@@ -505,74 +506,6 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   </div>
   </div>
 
-  <!-- ── OEE SECTION ──────────────────────────────────────────────────────── -->
-  <div data-print-section="oee" style="display:contents">
-  <div class="section-title">Overall Equipment Effectiveness (OEE) <span class="section-tag" style="background:var(--purple-lt);color:var(--purple)">Availability × Performance × Quality</span></div>
-
-  <!-- Overall + tier cards -->
-  <div class="maint-type-grid" id="oee-tier-cards" style="grid-template-columns:repeat(4,1fr);"></div>
-
-  <!-- Trend chart -->
-  <div class="cc" style="margin-bottom:18px;">
-    <div class="ch"><div><div class="ct">OEE Trend</div><div class="cs">Daily OEE, Availability, Performance, Quality — selected period</div></div></div>
-    <canvas id="oeeTrendChart" style="max-height:220px;"></canvas>
-  </div>
-
-  <!-- Per-line table -->
-  <div class="tcard" style="margin-bottom:18px;">
-    <div class="thead"><div><div class="ct">OEE by Line</div><div class="cs">Click a row for breakdown detail · sorted by OEE</div></div></div>
-    <div class="tscroll" style="max-height:340px;"><table class="tcompact">
-      <thead><tr>
-        <th style="text-align:left">Code</th><th style="text-align:left">Line</th><th style="text-align:left">Tier</th>
-        <th>Availability</th><th>Performance</th><th>Quality</th><th>OEE</th><th>Output Kg</th><th>Defect Kg</th>
-      </tr></thead>
-      <tbody id="oee-line-tbody"></tbody>
-    </table></div>
-  </div>
-
-  <!-- Wastage & Rejects table -->
-  <div class="tcard" id="oee-rejects-card" style="margin-bottom:18px;">
-    <div class="thead"><div><div class="ct">Wastage & Quality Rejects</div><div class="cs" id="oee-rejects-sub">No Quality Reject entries for this period yet</div></div></div>
-    <div class="tscroll" style="max-height:340px;"><table class="tcompact">
-      <thead><tr>
-        <th style="text-align:left">Date</th><th style="text-align:left">Line</th><th style="text-align:left">Shift</th>
-        <th style="text-align:left">Product SKU</th><th style="text-align:left">Stage</th>
-        <th>Output Kg</th><th>Defect Kg</th><th style="text-align:left">Defect Type</th>
-        <th style="text-align:left">Classification</th><th style="text-align:left">Notes</th>
-      </tr></thead>
-      <tbody id="oee-rejects-tbody"></tbody>
-    </table></div>
-  </div>
-  </div>
-
-  <!-- ── OEE PER-LINE DETAIL MODAL ───────────────────────────────────────── -->
-  <div id="oee-modal" style="display:none;position:fixed;inset:0;background:rgba(26,29,38,.55);z-index:200;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target.id==='oee-modal')closeOeeModal()">
-    <div style="background:#fff;border-radius:var(--r);max-width:900px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.25);">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:#fff;z-index:1;">
-        <div><div class="ct" id="oee-modal-title" style="font-size:14px;">Line Detail</div><div class="cs" id="oee-modal-sub"></div></div>
-        <button class="btn" onclick="closeOeeModal()" style="font-weight:700;">✕ Close</button>
-      </div>
-      <div style="padding:18px 20px;">
-        <div class="maint-type-grid" id="oee-modal-stats" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;"></div>
-        <div class="cc" style="margin-bottom:16px;">
-          <div class="ch"><div><div class="ct">Run Time vs Logged Downtime — by Day</div></div></div>
-          <canvas id="oeeModalChart" style="max-height:200px;"></canvas>
-        </div>
-        <div class="tcard" style="margin-bottom:0;">
-          <div class="thead"><div><div class="ct">Quality Rejects — this line</div><div class="cs" id="oee-modal-rejects-sub"></div></div></div>
-          <div class="tscroll" style="max-height:220px;"><table class="tcompact">
-            <thead><tr>
-              <th style="text-align:left">Date</th><th style="text-align:left">Shift</th><th style="text-align:left">Product SKU</th>
-              <th style="text-align:left">Stage</th><th>Output Kg</th><th>Defect Kg</th>
-              <th style="text-align:left">Defect Type</th><th style="text-align:left">Classification</th>
-            </tr></thead>
-            <tbody id="oee-modal-rejects-tbody"></tbody>
-          </table></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- ── HOURLY RATES SECTION ────────────────────────────────────────────── -->
   <div data-print-section="hourly" style="display:contents">
   <div class="section-title">Hourly Labour Cost by Product <span class="section-tag tag-labour">Actual from ERP Allocation + Production DB</span></div>
@@ -659,6 +592,24 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   </div>
   </div>
 
+  <!-- ── WIP TRACKING SECTION ─────────────────────────────────────────────── -->
+  <div data-print-section="wip" style="display:contents">
+  <div class="section-title">WIP Inventory <span class="section-tag tag-labour">Batch Production Master · FIFO Balance</span></div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:11px;color:var(--text3);">
+    <span>Noodle → shaped-soap yield:</span>
+    <input type="number" id="wip-yield" value="80" min="1" max="100" style="width:56px;padding:3px 6px;border:1px solid var(--border2);border-radius:4px;" onchange="wipYieldPct=parseFloat(this.value)||80;renderWIP();">%
+    <span style="margin-left:auto;">Balances shown as of the "Date To" filter · separate from and does not affect labour/CS/kg figures elsewhere on this dashboard</span>
+  </div>
+  <div class="kgrid" id="wip-cards"></div>
+  <div class="tcard" style="margin-top:14px;margin-bottom:18px;">
+    <div class="thead"><div><div class="ct">WIP Balance Detail — by Product</div><div class="cs">Cumulative produced − cumulative consumed = balance, as of Date To</div></div></div>
+    <div class="tscroll"><table class="tcompact">
+      <thead><tr><th style="text-align:left">WIP Product</th><th style="text-align:left">Line</th><th>Produced (kg)</th><th>Consumed (kg)</th><th>Balance (kg)</th><th style="text-align:left">Status</th></tr></thead>
+      <tbody id="wip-tbody"></tbody>
+    </table></div>
+  </div>
+  </div>
+
   </div><!-- /dash-content -->
 
   <!-- ALERTS SIDEBAR -->
@@ -685,8 +636,232 @@ const URLS = {
   capex:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vSLP21wbrS7yF9xeC5MajTcGIn4o_BUPYFkRi0NAxnagAtH7rDxSLRZHMJNpAFlaw/pub?gid=734700933&single=true&output=csv',
   prodDB:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=592000704&single=true&output=csv',
   prodSrc:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=636362217&single=true&output=csv',
-  qualityRej:'https://docs.google.com/spreadsheets/d/e/2PACX-1vRpJ6swt3zxbtSsRL1AY1bpVGvZ51UAqbf6yr78Dl9sHjRVXMtGqUAVqpFIRtY-Ag/pub?gid=51173236&single=true&output=csv',
+  batch:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1uXib5Q_T0KAQgfQwaP_dHMvC9qX1fxzRxLLxDhZXF1ceau-9mCVa36scNOhd2A/pub?gid=33894759&single=true&output=csv',
 };
+
+// ── WIP TRACKING (BATCH PRODUCTION MASTER) ────────────────────────────────────
+// Completely separate, additive module. Does NOT read from, write to, or alter
+// any existing labour / CS-kg / OEE calculation elsewhere in this file — those
+// already correctly exclude batch-line kg from volume metrics. This module only
+// tracks Work-In-Progress *inventory balance* through the mixing chain:
+//   WIP Balance (per product/stage, as of the "Date To" filter)
+//     = cumulative kg produced into that stage − cumulative kg consumed by the
+//       next stage (or by FG production), oldest-first (FIFO), confirmed with HOM.
+// Soap "noodle" stages are a special case: 1kg of shaped-soap WIP does NOT
+// consume 1kg of noodle — HOM confirmed a practical yield assumption (default
+// 80%, editable in the WIP section) applies across all three noodle types.
+let batchRows   = [];   // raw parsed Batch Production Master rows: {date,batch,line,weight}
+let wipYieldPct = 80;   // noodle → shaped-soap yield %, HOM-confirmed default, editable in UI
+
+// Aggressive key normaliser for matching WIP/batch names across sheets — strips
+// the word "wip", all spacing/punctuation/case differences. Needed because the
+// live sheet has real inconsistencies (e.g. "Base-Paste" vs "base-Paste") that
+// would otherwise silently break FIFO matching.
+const K = s => String(s||'').toLowerCase().replace(/\bwip\b/g,'').replace(/[^a-z0-9&]+/g,'');
+
+// Stage-2 (shaped WIP) and single-hop WIP → matching FG product_sku substring
+// (case-insensitive `includes`). One WIP can legitimately match several FG pack
+// sizes/lines (e.g. "F/Soft Mellow-Blue" feeds both bottle and sachet SKUs) —
+// substring matching handles that without needing every SKU listed explicitly.
+// Source: WIP_FG_Mapping_Draft.xlsx, corrected by HOM.
+const WIP_TO_FG_RAW = [
+ ['Chaya Beauty Soap Kohomba WIP','chaya kohomba soap'],
+ ['Chaya Beauty Soap Lavender WIP','chaya lavender soap'],
+ ['Chaya Beauty Soap Rose WIP','chaya winter rose soap'],
+ ['Chaya Beauty Soap Sandalwood WIP','chaya sandalwood soap'],
+ ['Halo Carbolic Soap- Red','halo soap (original)'],
+ ['Halo Carbolic Soap- Yellow','halo soap yellow'],
+ ['Detergent Bar Blue','star power soap - blue'],
+ ['Detergent Bar Green','star power soap - green'],
+ ['Detergent Bar Yellow','star power soap - yellow'],
+ ['Laundry Soap Blue','starlight lsblue'],
+ ['Laundry Soap Green','starlight lsgreen'],
+ ['Laundry Soap Pink','starlight lspink'],
+ ['Laundry Soap White','starlight lswhite'],
+ ['Laundry Soap Yellow','starlight lsyellow'],
+ ['Tharu Soap - Blue WIP','tharu soap blue'],
+ ['Tharu Soap - Green WIP','tharu soap green'],
+ ['Tharu Soap - Yellow WIP','tharu soap yellow'],
+ ['Clomax Lavender','clomax lavender'],
+ ['Clomax Original','clomax original'],
+ ['Toilet Bowl Cleaner','toilet bowl cleaner'],
+ ['D/W Liquid - Green','d/w liquid-green'],
+ ['Aqua Fresh Glass Cleaner','aqua fresh glass cleaner'],
+ ['Star Blue Liquid','star blue liquid'],
+ ['Halo Hand Wash - Red','halo hand wash - red'],
+ ['Halo Hand Wash - Green','halo hand wash - green'],
+ ['Halo Hand Wash - Yellow','halo hand wash - yellow'],
+ ['F/Soft Mellow-Blue','f/soft mellow-blue'],
+ ['F/Soft Mellow-Pink','f/soft mellow-pink'],
+ ['F/Soft Mellow-Green','f/soft mellow-green'],
+ ['F/Soft Mellow-MN Dream','f/soft mellow-mn dream'],
+ ['F/Soft Mellow-S/Dream','f/soft mellow-s/dream'],
+ ['Star Power Wash (Rose)','star power wash (rose)'],
+ ['Star Power Wash Yellow','star power wash yellow'],
+ ['Germol Rose Pink','germol rose pink'],
+ ['Germol Lavender','germol lavender'],
+ ['Germol Yellow','germol yellow'],
+ ['Incense Stick MG WIP - Citronella','mosgard citronella'],
+ ['Incense Stick WIP - Jasmine','dharma jasmine'],
+ ['Incense Stick WIP - Lavender','dharma lavender'],
+ ['Incense Stick WIP - Pineapple','dharma pineapple'],
+ ['Incense Stick WIP - Rose','dharma rose'],
+ ['Incense Stick WIP - Sandal king','dharma s/king'],
+ ['Incense Stick WIP - Strawberry','dharma strawberry'],
+ ['Detergent Powder Araliya & Melon','d/powder araliya & melon'],
+ ['Detergent Powder Floral & Fruity','d/powder floral & fruity'],
+ ['Detergent Powder Blue','d/powder jasmin & lime'],
+];
+const WIP_TO_FG = new Map(WIP_TO_FG_RAW.map(([name,fg])=>[K(name),fg]));
+
+// Noodle (Stage 1) → Shaped WIP (Stage 2) product families it feeds. Consumption
+// = wipYieldPct% of the shaped-WIP kg produced (HOM-confirmed, not 1:1).
+const WIP_NOODLE_FEEDS_RAW = {
+  'Local Detergent Soap Noodle': ['Detergent Bar Blue','Detergent Bar Green','Detergent Bar Yellow'],
+  'Local Laundry Soap Noodle':   ['Laundry Soap Blue','Laundry Soap Green','Laundry Soap Pink','Laundry Soap White','Laundry Soap Yellow'],
+  'Local Toilet Soap Noodle':    ['Chaya Beauty Soap Kohomba WIP','Chaya Beauty Soap Lavender WIP','Chaya Beauty Soap Rose WIP','Chaya Beauty Soap Sandalwood WIP','Halo Carbolic Soap- Red','Halo Carbolic Soap- Yellow'],
+};
+const WIP_NOODLE_FEEDS = new Map(Object.entries(WIP_NOODLE_FEEDS_RAW).map(([n,arr])=>[K(n), arr.map(K)]));
+
+// WIP produced but with NO confirmed consumption ratio yet (e.g. a concentrate
+// blended into a much larger batch — not a simple kg-for-kg draw). Tracked as
+// accumulating WIP only, never netted, until HOM confirms the real ratio.
+const WIP_UNRESOLVED_CHAIN = new Set(['F/Soft Mellow Base-Paste wip','F/Soft Mellow -Yellow Final wip','Incense Stick MG RTD base  - Citronella'].map(K));
+
+// WIP confirmed to have no matching FG in production yet ("Not in System" /
+// not yet run) — accumulates only, no FG offset expected.
+const WIP_NO_FG_YET = new Set([
+  'Detergent Powder Herbal','Air Freshener Cinnamon','Scouring Powder WIP',
+  'Dish Wash Orange','Halo H/Sanitizer Liq','Halo H/Sanitizer Gel',
+  'D/W Liquid-Yellow','D/W Liquid - Orange','Pine Oil -White',
+  'Star Power Wash Lavender','Air Freshener Rose','Air Freshener Strawberry',
+  'Air Freshener Lavender','Tile Grout','Tile Cleaner',
+  'Long Bar Soap Wip - Pink','Long Bar Soap Wip - Yellow','Papaya Soap WIP',
+].map(K));
+
+// ── PARSE BATCH PRODUCTION MASTER CSV ─────────────────────────────────────────
+// Header row auto-detected by fetchCSV() (row 7 in the source sheet: DATE, SHIFT,
+// Stage, Batch, Line, Weight (Kg), ...). Date format confirmed as DD/MM/YYYY
+// going forward; legacy "YY/MM/D" text rows (e.g. "26/07/2") from before the
+// team's format fix are still parsed via fallback so early July data isn't lost.
+function parseBatchCSV(rows){
+  const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
+  return rows.map(r=>{
+    const vals   = Object.values(r);
+    const dateRaw= r['date']||vals[0]||'';
+    const batch  = r['batch']||vals[3]||'';
+    const line   = r['line']||vals[4]||'';
+    const weight = r['weight_kg']!==undefined?r['weight_kg']:(r['weight']!==undefined?r['weight']:vals[5]);
+    let nd = normaliseDate(dateRaw,'DM');
+    if(!nd || !/^20[0-9]{2}/.test(nd)){
+      const m = String(dateRaw).trim().match(/^(\d{2})\/(\d{1,2})\/(\d{1,2})$/); // legacy YY/MM/D
+      if(m) nd = `20${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    }
+    return { date: nd, batch: String(batch||'').trim(), line: String(line||'').trim(), weight: sf(weight) };
+  }).filter(r=>r.date && /^20[0-9]{2}-/.test(r.date) && r.batch && r.weight>0);
+}
+
+// ── BUILD WIP BALANCES (FIFO) ─────────────────────────────────────────────────
+// Balance is always "as of" the Date-To filter (a stock balance is a point-in-
+// time figure, not a period delta) — cumulative produced minus cumulative
+// consumed, from all available batch history through that date.
+function buildWIPBalances(to){
+  const families = {}; // K(batch) -> {name, line, lots:[{date,kg}]}
+  batchRows.forEach(r=>{
+    if(r.date>to) return;
+    const k = K(r.batch);
+    if(!families[k]) families[k] = { name:r.batch, line:r.line, lots:[] };
+    families[k].lots.push({date:r.date, kg:r.weight});
+  });
+
+  function fgConsumedFor(fgSubstring){
+    if(!prodData || !prodData.length) return 0;
+    const needle = fgSubstring.toLowerCase();
+    return prodData.filter(r=>r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
+      .reduce((s,r)=>s+(parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0),0);
+  }
+
+  const rowsOut = [];
+  Object.entries(families).forEach(([k,f])=>{
+    if(WIP_NOODLE_FEEDS.has(k)) return; // noodles handled below
+    const produced = f.lots.reduce((s,l)=>s+l.kg,0);
+    let consumed=0, status='tracked', note='WIP output minus matching FG output (1:1)';
+    if(WIP_UNRESOLVED_CHAIN.has(k)){
+      status='unresolved'; note='Consumption ratio not yet confirmed with HOM — accumulating only, not netted';
+    } else if(WIP_TO_FG.has(k)){
+      consumed = fgConsumedFor(WIP_TO_FG.get(k));
+    } else if(WIP_NO_FG_YET.has(k)){
+      status='no-fg'; note='No matching FG in production yet — accumulating only';
+    } else {
+      status='unmapped'; note='New/unrecognised WIP name — not yet in the confirmed mapping, please review';
+    }
+    rowsOut.push({name:f.name.trim(), line:f.line, produced, consumed, balance:produced-consumed, status, note});
+  });
+  WIP_NOODLE_FEEDS.forEach((stage2Keys, noodleKey)=>{
+    const f = families[noodleKey];
+    if(!f) return;
+    const produced = f.lots.reduce((s,l)=>s+l.kg,0);
+    let stage2Total = 0;
+    stage2Keys.forEach(sk=>{ const sf=families[sk]; if(sf) stage2Total += sf.lots.reduce((s,l)=>s+l.kg,0); });
+    const consumed = stage2Total * (wipYieldPct/100);
+    rowsOut.push({name:f.name.trim(), line:f.line, produced, consumed, balance:produced-consumed, status:'noodle',
+      note:`${wipYieldPct}% yield applied to ${Math.round(stage2Total).toLocaleString()} kg of shaped-WIP output`});
+  });
+  return rowsOut;
+}
+
+function wipLabourCostPerKg(from,to){
+  const codes=['LBML','ISL','BSL','FSL','DPPL','DPML'];
+  const names=codes.map(c=>(LM[c]||'').toLowerCase()).filter(Boolean);
+  let cost=0;
+  if(allocData && allocData.lineTotals){
+    Object.entries(allocData.lineTotals).forEach(([line,val])=>{
+      const l=String(line).toLowerCase();
+      if(names.some(n=>l.includes(n))) cost+=val.cost||0;
+    });
+  }
+  const kg = batchRows.filter(r=>r.date>=from&&r.date<=to).reduce((s,r)=>s+r.weight,0);
+  return {cost, kg, perKg: kg>0?cost/kg:0};
+}
+
+function renderWIP(){
+  const wrap=$('wip-cards'), tbody=$('wip-tbody');
+  if(!wrap||!tbody) return;
+  const to = ($('f-to')||{}).value || '2026-06-02';
+  const from = ($('f-from')||{}).value || to;
+  if(!batchRows.length){
+    wrap.innerHTML='<div style="padding:20px;color:var(--text3);font-size:12px;">Connect the Batch Production Master sheet to see WIP balances.</div>';
+    tbody.innerHTML='';
+    return;
+  }
+  const detail = buildWIPBalances(to);
+  const tracked   = detail.filter(r=>r.status==='tracked');
+  const noodles   = detail.filter(r=>r.status==='noodle');
+  const attention = detail.filter(r=>r.status==='unresolved'||r.status==='unmapped');
+  const totalBalance  = tracked.reduce((s,r)=>s+r.balance,0)+noodles.reduce((s,r)=>s+r.balance,0);
+  const shapedBalance = tracked.reduce((s,r)=>s+r.balance,0);
+  const noodleBalance = noodles.reduce((s,r)=>s+r.balance,0);
+  const lc = wipLabourCostPerKg(from,to);
+
+  wrap.innerHTML = `
+    <div class="kpi blue"><div class="klbl">Total Tracked WIP Balance</div><div class="kval">${Math.round(totalBalance).toLocaleString()} kg</div><div class="ksub">As of ${to}&nbsp;<span class="badge neu">${tracked.length+noodles.length} products</span></div></div>
+    <div class="kpi teal"><div class="klbl">Noodle Stage Balance</div><div class="kval">${Math.round(noodleBalance).toLocaleString()} kg</div><div class="ksub">${wipYieldPct}% yield applied&nbsp;<span class="badge neu">${noodles.length} types</span></div></div>
+    <div class="kpi green"><div class="klbl">Shaped/Direct WIP Balance</div><div class="kval">${Math.round(shapedBalance).toLocaleString()} kg</div><div class="ksub">Matched to a confirmed FG&nbsp;<span class="badge neu">${tracked.length} products</span></div></div>
+    <div class="kpi ${attention.length>0?'red':'gold'}"><div class="klbl">Needs Attention</div><div class="kval">${attention.length}</div><div class="ksub">Unresolved ratio or unmapped name&nbsp;<span class="badge ${attention.length>0?'up':'neu'}">${attention.length>0?'Review':'Clear'}</span></div></div>
+    <div class="kpi amber"><div class="klbl">Labour Cost per WIP Kg</div><div class="kval">${lc.kg>0?('LKR '+lc.perKg.toFixed(2)):'–'}</div><div class="ksub">Batch/mixing lines, ${from} to ${to}&nbsp;<span class="badge neu">Elec/maint pending</span></div></div>
+  `;
+
+  const statusLabel = {tracked:'✅ Tracked', noodle:'🔵 Noodle stage', unresolved:'🟡 Ratio unconfirmed', 'no-fg':'⚪ No FG yet', unmapped:'🔴 Unmapped — new name'};
+  tbody.innerHTML = detail.sort((a,b)=>b.balance-a.balance).map(r=>`
+    <tr>
+      <td style="text-align:left">${r.name}</td>
+      <td style="text-align:left">${r.line||'–'}</td>
+      <td>${Math.round(r.produced).toLocaleString()}</td>
+      <td>${Math.round(r.consumed).toLocaleString()}</td>
+      <td style="font-weight:700;${r.balance<0?'color:var(--red)':''}">${Math.round(r.balance).toLocaleString()}</td>
+      <td style="text-align:left;font-size:11px;" title="${r.note}">${statusLabel[r.status]||r.status}</td>
+    </tr>`).join('');
+}
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 // ── PARSE LABOUR ALLOCATION CSV ───────────────────────────────────────────────
@@ -1008,29 +1183,6 @@ function calcDailyCost(role, hours, isSundayOrPoya) {
 let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodSources={};
 let hrLineManualOverride=false; // true once the user manually changes the Hourly Rates section's own line dropdown
 const PROMO_LINE = 'PARL'; // Promo/Rework line — repacks already-produced FG; excluded from kg, cost tracked separately
-
-// ── OEE: LINE MECHANIZATION TIERS (confirmed by Hemantha, 09 Jul 2026) ────────
-// Batch/PARL lines (PRL, DPML, LBML, PCL, CRWL, FGL, PARL) are excluded from OEE
-// entirely per BATCH_LINE_CODES below, but tiers are recorded for all lines in
-// case that exclusion rule ever changes.
-const LINE_TIER = {
-  'DFL':'Fully Mechanized','DPPL':'Fully Mechanized','FSL':'Fully Mechanized','LPSL':'Fully Mechanized',
-  'BSL':'Semi-Mechanized','ISL':'Semi-Mechanized','LLPL':'Semi-Mechanized','BPKL':'Semi-Mechanized',
-  'TBCPL':'Manual','AFPL':'Manual','GCPL':'Manual','BPL':'Manual','CPL':'Manual','BLPL':'Manual',
-  'SBLPL':'Manual','HWLPL':'Manual','DLPL':'Manual','DPL':'Manual','FSBPL':'Manual',
-  // Excluded from OEE views (batch/PARL), tier recorded for completeness only:
-  'PRL':'Semi-Mechanized','DPML':'Fully Mechanized','LBML':'Fully Mechanized','PCL':'Manual','CRWL':'Manual','FGL':'Manual','PARL':'Manual',
-};
-const OEE_TIERS = ['Fully Mechanized','Semi-Mechanized','Manual'];
-const OEE_TIER_COLOR = {'Fully Mechanized':'#0d7a6b','Semi-Mechanized':'#e8a000','Manual':'#c0392b'};
-
-// ── OEE: STATE ─────────────────────────────────────────────────────────────
-let qualityRejData = []; // parsed rows from Quality Rejects sheet (Date, Line, Shift, Product SKU, Stage, Output Kg, Defect Type, Defect Qty g/kg, Classification, Notes)
-let oeeModalLine = null; // currently open per-line detail popup, or null
-
-// SHI-confirmed OEE constants (locked 09 Jul 2026):
-const OEE_SHIFT_MIN = 720;   // Total Available Time — 12hr shift, both DAY & NIGHT
-const OEE_BREAK_MIN = 75;    // Fixed break deduction — 1hr 15min per shift, matches Capacity Dashboard
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const lname=c=>LM[c]||c;
@@ -1364,7 +1516,7 @@ async function connectAll(){
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
   console.log('connectAll starting for range:', from, 'to', to, 'requestId:', myRequestId);
 
-  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows,qualRows]=await Promise.all([
+  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows,batchCsvRows]=await Promise.all([
     fetchCSV(URLS.labourCSV),
     fetchCSV(URLS.eng),
     fetchCSV(URLS.elecDaily),
@@ -1372,7 +1524,7 @@ async function connectAll(){
     fetchCSV(URLS.capex),
     fetchCSV(URLS.prodDB),
     fetchCSV(URLS.prodSrc),
-    fetchCSV(URLS.qualityRej),
+    fetchCSV(URLS.batch),
   ]);
 
   // Ignore stale responses if a newer request has started
@@ -1388,9 +1540,7 @@ async function connectAll(){
   engData   = filterByDate(engRows,'date',from,to);
   elecDaily = filterByDate(elecDRows,'date',from,to);
   elecBill  = elecBRows; // all months
-  // Purchase Date is plain DD/MM/YYYY text entered by the team (like the
-  // other Engineering-tab sheets), so use the default 'DM' preferFormat.
-  capexData = filterByDate(capRows,'purchase_date',from,to);
+  capexData = capRows;
   // Debug all sources
   
   // Production DB — use positional columns (structure is fixed)
@@ -1401,21 +1551,6 @@ async function connectAll(){
   if(prodRows.length > 0) {
     const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
     
-    // OEE: find a column value by lenient substring match against normalised
-    // header keys — the Breakdown Type group (Machine/Quality/WareHouse/Change
-    // Over/Production/Labor/Material Problem, all in minutes) sits under a
-    // 4-row merged header in the source sheet, so exact key names aren't
-    // reliable across CSV exports. Substring matching (same pattern already
-    // used elsewhere for line-name matching) is more robust here.
-    const findCol = (r, patterns) => {
-      const keys = Object.keys(r);
-      for(const k of keys){
-        const nk = k.toLowerCase();
-        for(const p of patterns){ if(nk.includes(p)) return r[k]; }
-      }
-      return undefined;
-    };
-
     prodData = prodRows.map(r => {
       const vals = Object.values(r);
       // Find date value - look for value matching date pattern
@@ -1434,38 +1569,17 @@ async function connectAll(){
         prodVal  = String(vals[lineIdx+1]||'').trim();
         stageVal = String(vals[lineIdx+2]||'').trim();
       }
-      // Shift: explicit DAY/NIGHT token anywhere in the row
-      let shiftVal = 'DAY';
-      for(let i=0;i<vals.length;i++){
-        const v = String(vals[i]||'').trim().toUpperCase();
-        if(v==='DAY'||v==='NIGHT'){ shiftVal=v; break; }
-      }
-      // OEE: logged breakdown minutes, any reason (Machine/Quality/WareHouse/
-      // ChangeOver/Production/Labor/Material Problem) — summed per row per
-      // decision #5: only explicitly-logged downtime counts against
-      // Availability; unlogged gaps are "No Plan" and excluded entirely.
-      const breakdownMin =
-        sf(findCol(r,['machine_problem','machine problem'])) +
-        sf(findCol(r,['quilty_problem','quality_problem','quilty problem','quality problem'])) +
-        sf(findCol(r,['ware_house_problem','warehouse_problem','ware house problem'])) +
-        sf(findCol(r,['change_over','changing'])) +
-        sf(findCol(r,['production_problem','production problem'])) +
-        sf(findCol(r,['labor_problem','labour_problem','labor problem'])) +
-        sf(findCol(r,['material_problem','material problem']));
-
       return {
         date:              dateVal,
         line:              lineVal,
-        shift:             shiftVal,
         product_sku:       prodVal,
         stage:             stageVal,
-        run_time_hr:       sf(r['run_time_hr']||vals[12]),
+        run_time_hr:       r['run_time_hr']||vals[12],
         planned_out_put_cs:r['planned_out_put_cs']||vals[13],
         actual_out_put_cs: r['actual_out_put_cs']||vals[15],
         actual_out_put_kg: r['actual_out_put_kg']||vals[16],
         actual_labour_hr:  r['actual_labour_hr']||r['total_labor_hr']||vals[10],
         planned_labour_hr: r['planned_labour_hr']||vals[13],
-        breakdown_min:     breakdownMin,
       };
     }).filter(r => r.date && r.date >= from && r.date <= to);
     
@@ -1475,31 +1589,7 @@ async function connectAll(){
     prodData = [];
   }
   if(srcRows.length>0) parseProdSources(srcRows);
-
-  // Quality Rejects — Date, Line, Shift, Product SKU, Stage, Output Kg, Defect
-  // Type, Defect Qty (g), Defect Qty (Kg), Defect Classification, Notes.
-  // Sheet is new (approved format, empty until QA starts entering rows) — an
-  // empty/no-match result is expected and normal, not an error.
-  if(qualRows.length>0){
-    qualityRejData = qualRows.map(r=>{
-      const sf2 = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;}};
-      return {
-        date:       normaliseDate(String(r['date']||'').trim()),
-        line:       String(r['line']||'').trim(),
-        shift:      String(r['shift']||'').trim().toUpperCase(),
-        product_sku:String(r['product_sku']||r['product_sku_']||'').trim(),
-        stage:      String(r['stage']||'').trim(),
-        output_kg:  sf2(r['output_kg']),
-        defect_type:String(r['defect_type']||'').trim(),
-        defect_kg:  sf2(r['defect__reject_qty_kg']||r['defect_reject_qty_kg']||r['defect__reject_qty_kg_']),
-        classification: String(r['defect_classification']||'').trim(),
-        notes:      String(r['notes']||'').trim(),
-      };
-    }).filter(r=>r.date && r.line); // drop blank template rows
-  } else {
-    qualityRejData = [];
-  }
-
+  batchRows = batchCsvRows.length>0 ? parseBatchCSV(batchCsvRows) : [];
   // Refresh line filter dropdown with live line codes
   populateLineFilter();
 
@@ -1515,7 +1605,7 @@ async function connectAll(){
   if(elecBRows.length>0)parts.push(`✅ Bills: ${elecBRows.length} months`);
   if(capRows.length>0)parts.push(`✅ Capex: ${capRows.length} assets`);
   if(prodRows.length>0)parts.push(`✅ Production DB: ${prodData.length} records (${from} to ${to})`);
-  if(qualRows.length>0)parts.push(`✅ Quality Rejects: ${qualityRejData.length} entries`);
+  if(batchCsvRows.length>0)parts.push(`✅ Batch Master: ${batchRows.length} rows`);
 
   if(parts.length>0){
     if(bar)bar.className='live-bar connected';
@@ -1540,6 +1630,7 @@ async function connectAll(){
   const c2 = calcCosts($('f-from').value, $('f-to').value);
   renderLabour(c2);
   renderHourlyRates();
+  renderWIP();
 }
 
 // ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
@@ -1951,14 +2042,7 @@ function renderKPIs(rows,c){
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
     {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu'},
   ];
-  const kpiHtml = kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
-  // OEE card — placeholder here, content filled in by renderOEE() (which runs
-  // after renderKPIs in renderAll and needs Production DB + Quality Rejects
-  // data already loaded). Highest-OEE tier shown as the primary value; the
-  // other tiers shown as a blue small-text breakdown, matching the pattern
-  // used for Labour Cost's Production/Promo split above.
-  const oeeCardHtml = `<div class="kpi purple" id="kpi-oee"><div class="klbl">OEE — Overall Equipment Effectiveness</div><div class="kval">–</div><div class="ksub"><span class="oee-kpi-sub">Connect Production DB + Quality Rejects data</span>&nbsp;<span class="badge neu oee-kpi-badge">–</span></div></div>`;
-  $('kgrid').innerHTML=kpiHtml+oeeCardHtml;
+  $('kgrid').innerHTML=kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
 }
 
 // ── RENDER ALERTS ─────────────────────────────────────────────────────────────
@@ -2321,7 +2405,7 @@ function renderCapex(){
   const active   =filteredCapex.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
 
   $('capex-grid').innerHTML=`
-    <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${filteredCapex.length}</div><div class="capex-stat-sub">${active} active</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${capexData.length}</div><div class="capex-stat-sub">${active} active</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Total Capex Value</div><div class="capex-stat-val">${fmt(totalCost)}</div><div class="capex-stat-sub">Original cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Monthly Depreciation</div><div class="capex-stat-val">${fmt(totalDepr)}</div><div class="capex-stat-sub">Not in unit cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
@@ -2363,273 +2447,6 @@ function toggleCapexTable(){
   const show=wrap.style.display==='none';
   wrap.style.display=show?'':'none';
   btn.textContent=show?'Hide Asset Detail ▲':'Show Asset Detail ▼';
-}
-
-// ── OEE: RESOLVE A LINE NAME (as stored in Quality Rejects sheet) TO ITS CODE ──
-// Quality Rejects sheet stores full descriptive line names via dropdown (e.g.
-// "Finishing Soap Line"), same pattern as Labour Allocation — not the short
-// codes (FSL) used in Production DB / LM. Exact match first, substring
-// fallback second (wording variants), same approach used elsewhere in the app.
-function resolveLineCode(nameOrCode){
-  const s = String(nameOrCode||'').trim();
-  if(!s) return '';
-  if(LM[s]) return s; // already a code
-  const sl = s.toLowerCase();
-  for(const [code,name] of Object.entries(LM)){ if(name.toLowerCase()===sl) return code; }
-  for(const [code,name] of Object.entries(LM)){ if(name.toLowerCase().includes(sl)||sl.includes(name.toLowerCase())) return code; }
-  return '';
-}
-
-// ── OEE: CALCULATE AVAILABILITY × PERFORMANCE × QUALITY ────────────────────
-// Availability = Run Time / (Run Time + logged breakdown minutes) — per shift
-//   decision: only explicitly-logged downtime (any reason) counts against a
-//   line; unexplained gaps are "No Plan" and are excluded from the calc
-//   entirely (not counted as either running or down).
-// Performance  = Actual Output CS / Planned Output CS (same basis as the
-//   existing "Output Efficiency" KPI, which is left untouched — this is a
-//   separate calc feeding the new OEE section only).
-// Quality      = 1 − (Defect Kg / Output Kg) from the Quality Rejects sheet.
-//   Defaults to 100% wherever no reject rows exist yet for that line/period
-//   (sheet is new — approved format, not yet populated) so OEE never zeroes
-//   out or breaks while QA ramps up data entry.
-// Batch/PARL lines are excluded entirely (matches existing volume/efficiency rule).
-function calcOEE(from, to){
-  const lf = getLineFilter();
-  const sf3 = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
-
-  const rows = (prodData||[]).filter(r=>
-    r.date && r.date>=from && r.date<=to && r.line &&
-    !BATCH_LINE_CODES.has(r.line) && (lf==='all' || r.line===lf)
-  );
-
-  // Per-line raw aggregates
-  const lineAgg = {};
-  rows.forEach(r=>{
-    if(!lineAgg[r.line]) lineAgg[r.line] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0};
-    const g = lineAgg[r.line];
-    g.runHrMin     += (r.run_time_hr||0)*60;
-    g.breakdownMin += (r.breakdown_min||0);
-    g.plannedCS    += sf3(r.planned_out_put_cs);
-    g.actualCS     += sf3(r.actual_out_put_cs);
-  });
-
-  // Quality Rejects — filter to period + resolved line code + (line filter)
-  const qRows = (qualityRejData||[]).filter(r=>{
-    if(!r.date || r.date<from || r.date>to) return false;
-    const code = r.code || resolveLineCode(r.line);
-    if(!code || BATCH_LINE_CODES.has(code)) return false;
-    if(lf!=='all' && code!==lf) return false;
-    return true;
-  }).map(r=>({...r, code: r.code||resolveLineCode(r.line)}));
-
-  const qualAgg = {};
-  qRows.forEach(r=>{
-    if(!qualAgg[r.code]) qualAgg[r.code] = {outputKg:0,defectKg:0};
-    qualAgg[r.code].outputKg += r.output_kg||0;
-    qualAgg[r.code].defectKg += r.defect_kg||0;
-  });
-
-  const ratios = g => ({
-    avail: (g.runHrMin+g.breakdownMin)>0 ? g.runHrMin/(g.runHrMin+g.breakdownMin) : null,
-    perf:  g.plannedCS>0 ? g.actualCS/g.plannedCS : null,
-  });
-
-  const lines = Object.keys(lineAgg).map(code=>{
-    const g = lineAgg[code];
-    const {avail,perf} = ratios(g);
-    const q = qualAgg[code];
-    const quality = (q && q.outputKg>0) ? Math.max(0,Math.min(1, 1-(q.defectKg/q.outputKg))) : 1;
-    const oee = (avail??1)*(perf??1)*quality;
-    return {
-      code, name: lname(code), tier: LINE_TIER[code]||'Unclassified',
-      avail, perf, quality, oee,
-      runHrMin:g.runHrMin, breakdownMin:g.breakdownMin,
-      plannedCS:g.plannedCS, actualCS:g.actualCS,
-      outputKg: q?q.outputKg:0, defectKg: q?q.defectKg:0,
-    };
-  }).sort((a,b)=>b.oee-a.oee);
-
-  // Tier rollups — aggregate raw sums first, then compute ratios (avoids
-  // small-line bias from averaging percentages directly).
-  const tierRaw = {}; OEE_TIERS.forEach(t=>tierRaw[t]={runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,outputKg:0,defectKg:0,lineCount:0});
-  lines.forEach(l=>{
-    const t = tierRaw[l.tier]; if(!t) return;
-    t.runHrMin+=l.runHrMin; t.breakdownMin+=l.breakdownMin; t.plannedCS+=l.plannedCS; t.actualCS+=l.actualCS;
-    t.outputKg+=l.outputKg; t.defectKg+=l.defectKg; t.lineCount++;
-  });
-  const tiers = {};
-  OEE_TIERS.forEach(t=>{
-    const g = tierRaw[t];
-    const {avail,perf} = ratios(g);
-    const quality = g.outputKg>0 ? Math.max(0,Math.min(1,1-(g.defectKg/g.outputKg))) : 1;
-    tiers[t] = { ...g, avail, perf, quality, oee: g.lineCount>0 ? (avail??1)*(perf??1)*quality : null };
-  });
-
-  // Overall (all non-excluded lines combined)
-  const overallRaw = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,outputKg:0,defectKg:0,lineCount:lines.length};
-  lines.forEach(l=>{ overallRaw.runHrMin+=l.runHrMin; overallRaw.breakdownMin+=l.breakdownMin; overallRaw.plannedCS+=l.plannedCS; overallRaw.actualCS+=l.actualCS; overallRaw.outputKg+=l.outputKg; overallRaw.defectKg+=l.defectKg; });
-  const overallR = ratios(overallRaw);
-  const overallQuality = overallRaw.outputKg>0 ? Math.max(0,Math.min(1,1-(overallRaw.defectKg/overallRaw.outputKg))) : 1;
-  const overall = { ...overallRaw, avail:overallR.avail, perf:overallR.perf, quality:overallQuality, oee: lines.length>0 ? (overallR.avail??1)*(overallR.perf??1)*overallQuality : null };
-
-  // Daily trend (respects line filter, combines all matching lines per day)
-  const dailyAgg = {}, dailyQual = {};
-  rows.forEach(r=>{
-    if(!dailyAgg[r.date]) dailyAgg[r.date] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0};
-    const d = dailyAgg[r.date];
-    d.runHrMin += (r.run_time_hr||0)*60; d.breakdownMin += (r.breakdown_min||0);
-    d.plannedCS += sf3(r.planned_out_put_cs); d.actualCS += sf3(r.actual_out_put_cs);
-  });
-  qRows.forEach(r=>{
-    if(!dailyQual[r.date]) dailyQual[r.date] = {outputKg:0,defectKg:0};
-    dailyQual[r.date].outputKg += r.output_kg||0; dailyQual[r.date].defectKg += r.defect_kg||0;
-  });
-  const trend = Object.keys(dailyAgg).sort().map(d=>{
-    const g = dailyAgg[d];
-    const avail = (g.runHrMin+g.breakdownMin)>0 ? g.runHrMin/(g.runHrMin+g.breakdownMin) : 1;
-    const perf  = g.plannedCS>0 ? g.actualCS/g.plannedCS : 0;
-    const q = dailyQual[d];
-    const quality = (q && q.outputKg>0) ? Math.max(0,Math.min(1,1-(q.defectKg/q.outputKg))) : 1;
-    return { date:d, avail, perf, quality, oee: avail*perf*quality };
-  });
-
-  return { overall, tiers, lines, trend, rejectRows: qRows };
-}
-
-// ── OEE: MODAL (per-line detail popup) ──────────────────────────────────────
-function openOeeModal(code){
-  oeeModalLine = code;
-  renderOeeModal();
-  const m = $('oee-modal'); if(m) m.style.display='flex';
-}
-function closeOeeModal(){
-  oeeModalLine = null;
-  const m = $('oee-modal'); if(m) m.style.display='none';
-  if(charts.oeeModal){ charts.oeeModal.destroy(); charts.oeeModal=null; }
-}
-function renderOeeModal(){
-  if(!oeeModalLine) return;
-  const from=$('f-from').value, to=$('f-to').value;
-  const data = calcOEE(from, to);
-  const line = data.lines.find(l=>l.code===oeeModalLine);
-  if(!line){ closeOeeModal(); return; }
-
-  $('oee-modal-title').textContent = `${line.name} (${line.code}) — ${line.tier}`;
-  $('oee-modal-sub').textContent = `${from} to ${to}`;
-
-  const pctStr = v => v==null ? '–' : (v*100).toFixed(1)+'%';
-  $('oee-modal-stats').innerHTML = `
-    <div class="maint-type-card"><div class="maint-type-label">Availability</div><div class="maint-type-val" style="color:var(--blue)">${pctStr(line.avail)}</div><div class="maint-type-sub">${line.runHrMin.toFixed(0)} min run · ${line.breakdownMin.toFixed(0)} min logged downtime</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Performance</div><div class="maint-type-val" style="color:var(--amber)">${pctStr(line.perf)}</div><div class="maint-type-sub">${Math.round(line.actualCS).toLocaleString()} of ${Math.round(line.plannedCS).toLocaleString()} CS</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Quality</div><div class="maint-type-val" style="color:var(--teal)">${pctStr(line.quality)}</div><div class="maint-type-sub">${line.outputKg>0?`${line.defectKg.toFixed(1)} kg defect of ${line.outputKg.toFixed(1)} kg`:'No Quality Reject entries this period'}</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">OEE</div><div class="maint-type-val" style="color:var(--purple)">${pctStr(line.oee)}</div><div class="maint-type-sub">Availability × Performance × Quality</div></div>`;
-
-  // Breakdown-reason-free note if no downtime logged
-  const lineRejects = data.rejectRows.filter(r=>r.code===line.code);
-  $('oee-modal-rejects-sub').textContent = lineRejects.length>0 ? `${lineRejects.length} reject entries this period` : 'No Quality Reject entries logged for this line/period yet';
-  $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>
-    `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`
-  ).join('') : '';
-
-  // Per-line trend (Run Time vs Breakdown, by day) for this line only
-  const lf0 = getLineFilter();
-  const dayRows = (prodData||[]).filter(r=>r.date>=from&&r.date<=to&&r.line===line.code);
-  const dayAgg = {};
-  dayRows.forEach(r=>{ if(!dayAgg[r.date]) dayAgg[r.date]={run:0,down:0}; dayAgg[r.date].run += (r.run_time_hr||0)*60; dayAgg[r.date].down += (r.breakdown_min||0); });
-  const days = Object.keys(dayAgg).sort();
-  if(charts.oeeModal) charts.oeeModal.destroy();
-  if(days.length>0){
-    const dayLabel=d=>{const [y,m,dd]=d.split('-').map(Number);return new Date(y,m-1,dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
-    charts.oeeModal = new Chart($('oeeModalChart').getContext('2d'),{type:'bar',data:{labels:days.map(dayLabel),datasets:[
-      {label:'Run Time (min)',data:days.map(d=>dayAgg[d].run),backgroundColor:'rgba(13,122,107,.55)',borderRadius:3,stack:'s'},
-      {label:'Logged Downtime (min)',data:days.map(d=>dayAgg[d].down),backgroundColor:'rgba(192,57,43,.55)',borderRadius:3,stack:'s'},
-    ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:8}}},scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},color:'#8b92a5'}},y:{stacked:true,grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5'}}}}});
-  }
-}
-
-// ── RENDER OEE SECTION + KPI CARD BADGE ─────────────────────────────────────
-function renderOEE(){
-  const from=$('f-from').value, to=$('f-to').value;
-  const data = calcOEE(from, to);
-  const pctStr = v => v==null ? '–' : (v*100).toFixed(1)+'%';
-
-  // KPI card: highest tier flagged as the primary value; others as blue
-  // small-text breakdown underneath (per Hemantha's requested pattern).
-  const tierList = OEE_TIERS.map(t=>({tier:t, ...data.tiers[t]})).filter(t=>t.lineCount>0 && t.oee!=null);
-  tierList.sort((a,b)=>b.oee-a.oee);
-  const top = tierList[0];
-  const kpiEl = $('kpi-oee');
-  if(kpiEl){
-    if(top){
-      kpiEl.querySelector('.kval').textContent = pctStr(top.oee);
-      kpiEl.querySelector('.oee-kpi-sub').textContent = `${top.tier} highest · Overall OEE: ${pctStr(data.overall.oee)}`;
-      const others = tierList.slice(1).map(t=>`${t.tier}: ${pctStr(t.oee)}`).join(' · ');
-      kpiEl.querySelector('.oee-kpi-badge').textContent = others || '–';
-    } else {
-      kpiEl.querySelector('.kval').textContent = '–';
-      kpiEl.querySelector('.oee-kpi-sub').textContent = 'Connect Production DB + Quality Rejects data';
-      kpiEl.querySelector('.oee-kpi-badge').textContent = '–';
-    }
-  }
-
-  // Overall + tier cards
-  const tierCardHtml = t => {
-    const g = data.tiers[t];
-    const color = OEE_TIER_COLOR[t];
-    return `<div class="maint-type-card" style="border-left:4px solid ${color}">
-      <div class="maint-type-label">${t}${g.lineCount>0?` (${g.lineCount} line${g.lineCount>1?'s':''})`:''}</div>
-      <div class="maint-type-val" style="color:${color}">${pctStr(g.oee)}</div>
-      <div class="maint-type-sub">Avail ${pctStr(g.avail)} · Perf ${pctStr(g.perf)} · Qual ${pctStr(g.quality)}</div>
-    </div>`;
-  };
-  const overallCardHtml = `<div class="maint-type-card" style="border-left:4px solid var(--purple)">
-      <div class="maint-type-label">Overall OEE (All Lines)</div>
-      <div class="maint-type-val" style="color:var(--purple)">${pctStr(data.overall.oee)}</div>
-      <div class="maint-type-sub">Avail ${pctStr(data.overall.avail)} · Perf ${pctStr(data.overall.perf)} · Qual ${pctStr(data.overall.quality)}</div>
-    </div>`;
-  const oeeCards = $('oee-tier-cards');
-  if(oeeCards) oeeCards.innerHTML = overallCardHtml + OEE_TIERS.map(tierCardHtml).join('');
-
-  // Per-line table
-  const tbody = $('oee-line-tbody');
-  if(tbody){
-    tbody.innerHTML = data.lines.length>0 ? data.lines.map(l=>
-      `<tr style="cursor:pointer" onclick="openOeeModal('${l.code}')">
-        <td style="text-align:left">${l.code}</td>
-        <td style="text-align:left" class="tname" title="${l.name}">${l.name}</td>
-        <td style="text-align:left"><span style="color:${OEE_TIER_COLOR[l.tier]||'#8b92a5'};font-weight:700">${l.tier}</span></td>
-        <td>${pctStr(l.avail)}</td>
-        <td>${pctStr(l.perf)}</td>
-        <td>${pctStr(l.quality)}</td>
-        <td style="font-weight:700">${pctStr(l.oee)}</td>
-        <td>${Math.round(l.outputKg).toLocaleString()}</td>
-        <td>${l.defectKg>0?l.defectKg.toFixed(1):'–'}</td>
-      </tr>`
-    ).join('') : `<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:20px">No Production DB data for this line/period</td></tr>`;
-  }
-
-  // OEE trend chart
-  if(charts.oeeTrend) charts.oeeTrend.destroy();
-  const canvasEl = $('oeeTrendChart');
-  if(canvasEl && data.trend.length>0){
-    const dayLabel=d=>{const [y,m,dd]=d.split('-').map(Number);return new Date(y,m-1,dd).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});};
-    charts.oeeTrend = new Chart(canvasEl.getContext('2d'),{type:'line',data:{labels:data.trend.map(t=>dayLabel(t.date)),datasets:[
-      {label:'OEE',data:data.trend.map(t=>(t.oee*100).toFixed(1)),borderColor:'#5b3fa0',backgroundColor:'rgba(91,63,160,.1)',fill:true,tension:.3,pointRadius:2,borderWidth:2},
-      {label:'Availability',data:data.trend.map(t=>(t.avail*100).toFixed(1)),borderColor:'#1a5fa8',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false},
-      {label:'Performance',data:data.trend.map(t=>(t.perf*100).toFixed(1)),borderColor:'#e8a000',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false},
-      {label:'Quality',data:data.trend.map(t=>(t.quality*100).toFixed(1)),borderColor:'#0d7a6b',borderDash:[4,3],pointRadius:0,borderWidth:1.5,fill:false},
-    ]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:8}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y}%`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#8b92a5',maxTicksLimit:12}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'%'},min:0,max:100}}}});
-  }
-
-  // Wastage & Rejects table (full period list, all lines respecting filter)
-  const wtbody = $('oee-rejects-tbody');
-  const wsub = $('oee-rejects-sub');
-  if(wsub) wsub.textContent = data.rejectRows.length>0 ? `${data.rejectRows.length} entries · Total defect: ${data.rejectRows.reduce((s,r)=>s+r.defect_kg,0).toFixed(1)} kg` : 'No Quality Reject entries for this period yet';
-  if(wtbody){
-    wtbody.innerHTML = data.rejectRows.length>0 ? data.rejectRows.map(r=>
-      `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.code||r.line}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td style="text-align:left">${r.classification||'–'}</td><td style="text-align:left;color:var(--text2)">${r.notes||'–'}</td></tr>`
-    ).join('') : `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:20px">No Quality Reject entries logged yet</td></tr>`;
-  }
 }
 
 // ── PRODUCTION DB TABLE ───────────────────────────────────────────────────────
@@ -2708,7 +2525,7 @@ function renderAll(){
   renderMaintenance(c);
   renderElectricity(c);
   renderCapex();
-  renderOEE();
+  renderWIP();
   updateTS();
 }
 
