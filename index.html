@@ -809,16 +809,21 @@ const WIP_NO_FG_YET = new Set([
 ].map(K));
 
 // ── PARSE BATCH PRODUCTION MASTER CSV ─────────────────────────────────────────
-// Header row auto-detected by fetchCSV() (row 7 in the source sheet: DATE, SHIFT,
-// Stage, Batch, Line, Weight (Kg), ...). Date format confirmed as DD/MM/YYYY
-// going forward; legacy "YY/MM/D" text rows (e.g. "26/07/2") from before the
-// team's format fix are still parsed via fallback so early July data isn't lost.
+// Header row auto-detected by fetchCSV() (row 7 in the source sheet: DATE, Shift,
+// Stage, Batch Name, Line, Weight (Kg), Labor, Total time, Breaktime, Run time,
+// Per Labour Cost Total Kg, Per Labour Cost 1KG — corrected by HOM on 10/07).
+// Batch Name is read positionally (column D / index 3) as a safety net, since
+// this sheet's header cells have previously been overwritten with example
+// values instead of labels — position is more reliable than header text here.
+// Date format confirmed as DD/MM/YYYY going forward; legacy "YY/MM/D" text rows
+// (e.g. "26/07/2") from before the team's format fix are still parsed via
+// fallback so early July data isn't lost.
 function parseBatchCSV(rows){
   const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
   return rows.map(r=>{
     const vals   = Object.values(r);
     const dateRaw= r['date']||vals[0]||'';
-    const batch  = r['batch']||vals[3]||'';
+    const batch  = r['batch_name']||vals[3]||r['batch']||'';
     const line   = r['line']||vals[4]||'';
     const weight = r['weight_kg']!==undefined?r['weight_kg']:(r['weight']!==undefined?r['weight']:vals[5]);
     let nd = normaliseDate(dateRaw,'DM');
