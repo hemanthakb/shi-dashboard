@@ -338,6 +338,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <option value="capex">Capital Expenditure</option>
       <option value="hourly">Hourly Labour Cost</option>
       <option value="production">Production Database</option>
+      <option value="wip">WIP Inventory</option>
     </select>
     <button class="btn btn-blue no-print" onclick="printSection()">🖨 Print</button>
   </div>
@@ -659,6 +660,24 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   </div>
   </div>
 
+  <!-- ── WIP TRACKING SECTION ─────────────────────────────────────────────── -->
+  <div data-print-section="wip" style="display:contents">
+  <div class="section-title">WIP Inventory <span class="section-tag tag-labour">Batch Production Master · FIFO Balance</span></div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:11px;color:var(--text3);">
+    <span>Noodle → shaped-soap yield:</span>
+    <input type="number" id="wip-yield" value="80" min="1" max="100" style="width:56px;padding:3px 6px;border:1px solid var(--border2);border-radius:4px;" onchange="wipYieldPct=parseFloat(this.value)||80;renderWIP();">%
+    <span style="margin-left:auto;">Balances shown as of the "Date To" filter · separate from and does not affect labour/CS/kg figures elsewhere on this dashboard</span>
+  </div>
+  <div class="kgrid" id="wip-cards"></div>
+  <div class="tcard" style="margin-top:14px;margin-bottom:18px;">
+    <div class="thead"><div><div class="ct">WIP Balance Detail — by Product</div><div class="cs">Cumulative produced − cumulative consumed = balance, as of Date To</div></div></div>
+    <div class="tscroll"><table class="tcompact">
+      <thead><tr><th style="text-align:left">WIP Product</th><th style="text-align:left">Line</th><th>Produced (kg)</th><th>Consumed (kg)</th><th>Balance (kg)</th><th style="text-align:left">Status</th></tr></thead>
+      <tbody id="wip-tbody"></tbody>
+    </table></div>
+  </div>
+  </div>
+
   </div><!-- /dash-content -->
 
   <!-- ALERTS SIDEBAR -->
@@ -686,7 +705,232 @@ const URLS = {
   prodDB:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=592000704&single=true&output=csv',
   prodSrc:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=636362217&single=true&output=csv',
   qualityRej:'https://docs.google.com/spreadsheets/d/e/2PACX-1vRpJ6swt3zxbtSsRL1AY1bpVGvZ51UAqbf6yr78Dl9sHjRVXMtGqUAVqpFIRtY-Ag/pub?gid=51173236&single=true&output=csv',
+  batch:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1uXib5Q_T0KAQgfQwaP_dHMvC9qX1fxzRxLLxDhZXF1ceau-9mCVa36scNOhd2A/pub?gid=33894759&single=true&output=csv',
 };
+
+// ── WIP TRACKING (BATCH PRODUCTION MASTER) ────────────────────────────────────
+// Completely separate, additive module. Does NOT read from, write to, or alter
+// any existing labour / CS-kg / OEE calculation elsewhere in this file — those
+// already correctly exclude batch-line kg from volume metrics. This module only
+// tracks Work-In-Progress *inventory balance* through the mixing chain:
+//   WIP Balance (per product/stage, as of the "Date To" filter)
+//     = cumulative kg produced into that stage − cumulative kg consumed by the
+//       next stage (or by FG production), oldest-first (FIFO), confirmed with HOM.
+// Soap "noodle" stages are a special case: 1kg of shaped-soap WIP does NOT
+// consume 1kg of noodle — HOM confirmed a practical yield assumption (default
+// 80%, editable in the WIP section) applies across all three noodle types.
+let batchRows   = [];   // raw parsed Batch Production Master rows: {date,batch,line,weight}
+let wipYieldPct = 80;   // noodle → shaped-soap yield %, HOM-confirmed default, editable in UI
+
+// Aggressive key normaliser for matching WIP/batch names across sheets — strips
+// the word "wip", all spacing/punctuation/case differences. Needed because the
+// live sheet has real inconsistencies (e.g. "Base-Paste" vs "base-Paste") that
+// would otherwise silently break FIFO matching.
+const K = s => String(s||'').toLowerCase().replace(/\bwip\b/g,'').replace(/[^a-z0-9&]+/g,'');
+
+// Stage-2 (shaped WIP) and single-hop WIP → matching FG product_sku substring
+// (case-insensitive `includes`). One WIP can legitimately match several FG pack
+// sizes/lines (e.g. "F/Soft Mellow-Blue" feeds both bottle and sachet SKUs) —
+// substring matching handles that without needing every SKU listed explicitly.
+// Source: WIP_FG_Mapping_Draft.xlsx, corrected by HOM.
+const WIP_TO_FG_RAW = [
+ ['Chaya Beauty Soap Kohomba WIP','chaya kohomba soap'],
+ ['Chaya Beauty Soap Lavender WIP','chaya lavender soap'],
+ ['Chaya Beauty Soap Rose WIP','chaya winter rose soap'],
+ ['Chaya Beauty Soap Sandalwood WIP','chaya sandalwood soap'],
+ ['Halo Carbolic Soap- Red','halo soap (original)'],
+ ['Halo Carbolic Soap- Yellow','halo soap yellow'],
+ ['Detergent Bar Blue','star power soap - blue'],
+ ['Detergent Bar Green','star power soap - green'],
+ ['Detergent Bar Yellow','star power soap - yellow'],
+ ['Laundry Soap Blue','starlight lsblue'],
+ ['Laundry Soap Green','starlight lsgreen'],
+ ['Laundry Soap Pink','starlight lspink'],
+ ['Laundry Soap White','starlight lswhite'],
+ ['Laundry Soap Yellow','starlight lsyellow'],
+ ['Tharu Soap - Blue WIP','tharu soap blue'],
+ ['Tharu Soap - Green WIP','tharu soap green'],
+ ['Tharu Soap - Yellow WIP','tharu soap yellow'],
+ ['Clomax Lavender','clomax lavender'],
+ ['Clomax Original','clomax original'],
+ ['Toilet Bowl Cleaner','toilet bowl cleaner'],
+ ['D/W Liquid - Green','d/w liquid-green'],
+ ['Aqua Fresh Glass Cleaner','aqua fresh glass cleaner'],
+ ['Star Blue Liquid','star blue liquid'],
+ ['Halo Hand Wash - Red','halo hand wash - red'],
+ ['Halo Hand Wash - Green','halo hand wash - green'],
+ ['Halo Hand Wash - Yellow','halo hand wash - yellow'],
+ ['F/Soft Mellow-Blue','f/soft mellow-blue'],
+ ['F/Soft Mellow-Pink','f/soft mellow-pink'],
+ ['F/Soft Mellow-Green','f/soft mellow-green'],
+ ['F/Soft Mellow-MN Dream','f/soft mellow-mn dream'],
+ ['F/Soft Mellow-S/Dream','f/soft mellow-s/dream'],
+ ['Star Power Wash (Rose)','star power wash (rose)'],
+ ['Star Power Wash Yellow','star power wash yellow'],
+ ['Germol Rose Pink','germol rose pink'],
+ ['Germol Lavender','germol lavender'],
+ ['Germol Yellow','germol yellow'],
+ ['Incense Stick MG WIP - Citronella','mosgard citronella'],
+ ['Incense Stick WIP - Jasmine','dharma jasmine'],
+ ['Incense Stick WIP - Lavender','dharma lavender'],
+ ['Incense Stick WIP - Pineapple','dharma pineapple'],
+ ['Incense Stick WIP - Rose','dharma rose'],
+ ['Incense Stick WIP - Sandal king','dharma s/king'],
+ ['Incense Stick WIP - Strawberry','dharma strawberry'],
+ ['Detergent Powder Araliya & Melon','d/powder araliya & melon'],
+ ['Detergent Powder Floral & Fruity','d/powder floral & fruity'],
+ ['Detergent Powder Blue','d/powder jasmin & lime'],
+];
+const WIP_TO_FG = new Map(WIP_TO_FG_RAW.map(([name,fg])=>[K(name),fg]));
+
+// Noodle (Stage 1) → Shaped WIP (Stage 2) product families it feeds. Consumption
+// = wipYieldPct% of the shaped-WIP kg produced (HOM-confirmed, not 1:1).
+const WIP_NOODLE_FEEDS_RAW = {
+  'Local Detergent Soap Noodle': ['Detergent Bar Blue','Detergent Bar Green','Detergent Bar Yellow'],
+  'Local Laundry Soap Noodle':   ['Laundry Soap Blue','Laundry Soap Green','Laundry Soap Pink','Laundry Soap White','Laundry Soap Yellow'],
+  'Local Toilet Soap Noodle':    ['Chaya Beauty Soap Kohomba WIP','Chaya Beauty Soap Lavender WIP','Chaya Beauty Soap Rose WIP','Chaya Beauty Soap Sandalwood WIP','Halo Carbolic Soap- Red','Halo Carbolic Soap- Yellow'],
+};
+const WIP_NOODLE_FEEDS = new Map(Object.entries(WIP_NOODLE_FEEDS_RAW).map(([n,arr])=>[K(n), arr.map(K)]));
+
+// WIP produced but with NO confirmed consumption ratio yet (e.g. a concentrate
+// blended into a much larger batch — not a simple kg-for-kg draw). Tracked as
+// accumulating WIP only, never netted, until HOM confirms the real ratio.
+const WIP_UNRESOLVED_CHAIN = new Set(['F/Soft Mellow Base-Paste wip','F/Soft Mellow -Yellow Final wip','Incense Stick MG RTD base  - Citronella'].map(K));
+
+// WIP confirmed to have no matching FG in production yet ("Not in System" /
+// not yet run) — accumulates only, no FG offset expected.
+const WIP_NO_FG_YET = new Set([
+  'Detergent Powder Herbal','Air Freshener Cinnamon','Scouring Powder WIP',
+  'Dish Wash Orange','Halo H/Sanitizer Liq','Halo H/Sanitizer Gel',
+  'D/W Liquid-Yellow','D/W Liquid - Orange','Pine Oil -White',
+  'Star Power Wash Lavender','Air Freshener Rose','Air Freshener Strawberry',
+  'Air Freshener Lavender','Tile Grout','Tile Cleaner',
+  'Long Bar Soap Wip - Pink','Long Bar Soap Wip - Yellow','Papaya Soap WIP',
+].map(K));
+
+// ── PARSE BATCH PRODUCTION MASTER CSV ─────────────────────────────────────────
+// Header row auto-detected by fetchCSV() (row 7 in the source sheet: DATE, SHIFT,
+// Stage, Batch, Line, Weight (Kg), ...). Date format confirmed as DD/MM/YYYY
+// going forward; legacy "YY/MM/D" text rows (e.g. "26/07/2") from before the
+// team's format fix are still parsed via fallback so early July data isn't lost.
+function parseBatchCSV(rows){
+  const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
+  return rows.map(r=>{
+    const vals   = Object.values(r);
+    const dateRaw= r['date']||vals[0]||'';
+    const batch  = r['batch']||vals[3]||'';
+    const line   = r['line']||vals[4]||'';
+    const weight = r['weight_kg']!==undefined?r['weight_kg']:(r['weight']!==undefined?r['weight']:vals[5]);
+    let nd = normaliseDate(dateRaw,'DM');
+    if(!nd || !/^20[0-9]{2}/.test(nd)){
+      const m = String(dateRaw).trim().match(/^(\d{2})\/(\d{1,2})\/(\d{1,2})$/); // legacy YY/MM/D
+      if(m) nd = `20${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+    }
+    return { date: nd, batch: String(batch||'').trim(), line: String(line||'').trim(), weight: sf(weight) };
+  }).filter(r=>r.date && /^20[0-9]{2}-/.test(r.date) && r.batch && r.weight>0);
+}
+
+// ── BUILD WIP BALANCES (FIFO) ─────────────────────────────────────────────────
+// Balance is always "as of" the Date-To filter (a stock balance is a point-in-
+// time figure, not a period delta) — cumulative produced minus cumulative
+// consumed, from all available batch history through that date.
+function buildWIPBalances(to){
+  const families = {}; // K(batch) -> {name, line, lots:[{date,kg}]}
+  batchRows.forEach(r=>{
+    if(r.date>to) return;
+    const k = K(r.batch);
+    if(!families[k]) families[k] = { name:r.batch, line:r.line, lots:[] };
+    families[k].lots.push({date:r.date, kg:r.weight});
+  });
+
+  function fgConsumedFor(fgSubstring){
+    if(!prodData || !prodData.length) return 0;
+    const needle = fgSubstring.toLowerCase();
+    return prodData.filter(r=>r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
+      .reduce((s,r)=>s+(parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0),0);
+  }
+
+  const rowsOut = [];
+  Object.entries(families).forEach(([k,f])=>{
+    if(WIP_NOODLE_FEEDS.has(k)) return; // noodles handled below
+    const produced = f.lots.reduce((s,l)=>s+l.kg,0);
+    let consumed=0, status='tracked', note='WIP output minus matching FG output (1:1)';
+    if(WIP_UNRESOLVED_CHAIN.has(k)){
+      status='unresolved'; note='Consumption ratio not yet confirmed with HOM — accumulating only, not netted';
+    } else if(WIP_TO_FG.has(k)){
+      consumed = fgConsumedFor(WIP_TO_FG.get(k));
+    } else if(WIP_NO_FG_YET.has(k)){
+      status='no-fg'; note='No matching FG in production yet — accumulating only';
+    } else {
+      status='unmapped'; note='New/unrecognised WIP name — not yet in the confirmed mapping, please review';
+    }
+    rowsOut.push({name:f.name.trim(), line:f.line, produced, consumed, balance:produced-consumed, status, note});
+  });
+  WIP_NOODLE_FEEDS.forEach((stage2Keys, noodleKey)=>{
+    const f = families[noodleKey];
+    if(!f) return;
+    const produced = f.lots.reduce((s,l)=>s+l.kg,0);
+    let stage2Total = 0;
+    stage2Keys.forEach(sk=>{ const sf=families[sk]; if(sf) stage2Total += sf.lots.reduce((s,l)=>s+l.kg,0); });
+    const consumed = stage2Total * (wipYieldPct/100);
+    rowsOut.push({name:f.name.trim(), line:f.line, produced, consumed, balance:produced-consumed, status:'noodle',
+      note:`${wipYieldPct}% yield applied to ${Math.round(stage2Total).toLocaleString()} kg of shaped-WIP output`});
+  });
+  return rowsOut;
+}
+
+function wipLabourCostPerKg(from,to){
+  const codes=['LBML','ISL','BSL','FSL','DPPL','DPML'];
+  const names=codes.map(c=>(LM[c]||'').toLowerCase()).filter(Boolean);
+  let cost=0;
+  if(allocData && allocData.lineTotals){
+    Object.entries(allocData.lineTotals).forEach(([line,val])=>{
+      const l=String(line).toLowerCase();
+      if(names.some(n=>l.includes(n))) cost+=val.cost||0;
+    });
+  }
+  const kg = batchRows.filter(r=>r.date>=from&&r.date<=to).reduce((s,r)=>s+r.weight,0);
+  return {cost, kg, perKg: kg>0?cost/kg:0};
+}
+
+function renderWIP(){
+  const wrap=$('wip-cards'), tbody=$('wip-tbody');
+  if(!wrap||!tbody) return;
+  const to = ($('f-to')||{}).value || '2026-06-02';
+  const from = ($('f-from')||{}).value || to;
+  if(!batchRows.length){
+    wrap.innerHTML='<div style="padding:20px;color:var(--text3);font-size:12px;">Connect the Batch Production Master sheet to see WIP balances.</div>';
+    tbody.innerHTML='';
+    return;
+  }
+  const detail = buildWIPBalances(to);
+  const tracked   = detail.filter(r=>r.status==='tracked');
+  const noodles   = detail.filter(r=>r.status==='noodle');
+  const attention = detail.filter(r=>r.status==='unresolved'||r.status==='unmapped');
+  const totalBalance  = tracked.reduce((s,r)=>s+r.balance,0)+noodles.reduce((s,r)=>s+r.balance,0);
+  const shapedBalance = tracked.reduce((s,r)=>s+r.balance,0);
+  const noodleBalance = noodles.reduce((s,r)=>s+r.balance,0);
+  const lc = wipLabourCostPerKg(from,to);
+
+  wrap.innerHTML = `
+    <div class="kpi blue"><div class="klbl">Total Tracked WIP Balance</div><div class="kval">${Math.round(totalBalance).toLocaleString()} kg</div><div class="ksub">As of ${to}&nbsp;<span class="badge neu">${tracked.length+noodles.length} products</span></div></div>
+    <div class="kpi teal"><div class="klbl">Noodle Stage Balance</div><div class="kval">${Math.round(noodleBalance).toLocaleString()} kg</div><div class="ksub">${wipYieldPct}% yield applied&nbsp;<span class="badge neu">${noodles.length} types</span></div></div>
+    <div class="kpi green"><div class="klbl">Shaped/Direct WIP Balance</div><div class="kval">${Math.round(shapedBalance).toLocaleString()} kg</div><div class="ksub">Matched to a confirmed FG&nbsp;<span class="badge neu">${tracked.length} products</span></div></div>
+    <div class="kpi ${attention.length>0?'red':'gold'}"><div class="klbl">Needs Attention</div><div class="kval">${attention.length}</div><div class="ksub">Unresolved ratio or unmapped name&nbsp;<span class="badge ${attention.length>0?'up':'neu'}">${attention.length>0?'Review':'Clear'}</span></div></div>
+    <div class="kpi amber"><div class="klbl">Labour Cost per WIP Kg</div><div class="kval">${lc.kg>0?('LKR '+lc.perKg.toFixed(2)):'–'}</div><div class="ksub">Batch/mixing lines, ${from} to ${to}&nbsp;<span class="badge neu">Elec/maint pending</span></div></div>
+  `;
+
+  const statusLabel = {tracked:'✅ Tracked', noodle:'🔵 Noodle stage', unresolved:'🟡 Ratio unconfirmed', 'no-fg':'⚪ No FG yet', unmapped:'🔴 Unmapped — new name'};
+  tbody.innerHTML = detail.sort((a,b)=>b.balance-a.balance).map(r=>`
+    <tr>
+      <td style="text-align:left">${r.name}</td>
+      <td style="text-align:left">${r.line||'–'}</td>
+      <td>${Math.round(r.produced).toLocaleString()}</td>
+      <td>${Math.round(r.consumed).toLocaleString()}</td>
+      <td style="font-weight:700;${r.balance<0?'color:var(--red)':''}">${Math.round(r.balance).toLocaleString()}</td>
+      <td style="text-align:left;font-size:11px;" title="${r.note}">${statusLabel[r.status]||r.status}</td>
+    </tr>`).join('');
+}
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 // ── PARSE LABOUR ALLOCATION CSV ───────────────────────────────────────────────
@@ -1364,7 +1608,7 @@ async function connectAll(){
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
   console.log('connectAll starting for range:', from, 'to', to, 'requestId:', myRequestId);
 
-  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows,qualRows]=await Promise.all([
+  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows,qualRows,batchCsvRows]=await Promise.all([
     fetchCSV(URLS.labourCSV),
     fetchCSV(URLS.eng),
     fetchCSV(URLS.elecDaily),
@@ -1373,6 +1617,7 @@ async function connectAll(){
     fetchCSV(URLS.prodDB),
     fetchCSV(URLS.prodSrc),
     fetchCSV(URLS.qualityRej),
+    fetchCSV(URLS.batch),
   ]);
 
   // Ignore stale responses if a newer request has started
@@ -1498,6 +1743,8 @@ async function connectAll(){
     qualityRejData = [];
   }
 
+  batchRows = batchCsvRows.length>0 ? parseBatchCSV(batchCsvRows) : [];
+
   // Refresh line filter dropdown with live line codes
   populateLineFilter();
 
@@ -1514,6 +1761,7 @@ async function connectAll(){
   if(capRows.length>0)parts.push(`✅ Capex: ${capRows.length} assets`);
   if(prodRows.length>0)parts.push(`✅ Production DB: ${prodData.length} records (${from} to ${to})`);
   if(qualRows.length>0)parts.push(`✅ Quality Rejects: ${qualityRejData.length} entries`);
+  if(batchCsvRows.length>0)parts.push(`✅ Batch Master: ${batchRows.length} rows`);
 
   if(parts.length>0){
     if(bar)bar.className='live-bar connected';
@@ -1538,6 +1786,7 @@ async function connectAll(){
   const c2 = calcCosts($('f-from').value, $('f-to').value);
   renderLabour(c2);
   renderHourlyRates();
+  renderWIP();
 }
 
 // ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
@@ -2707,6 +2956,7 @@ function renderAll(){
   renderElectricity(c);
   renderCapex();
   renderOEE();
+  renderWIP();
   updateTS();
 }
 
