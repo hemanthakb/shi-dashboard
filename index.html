@@ -538,7 +538,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <thead><tr>
         <th style="text-align:left">Date</th><th style="text-align:left">Line</th><th style="text-align:left">Shift</th>
         <th style="text-align:left">Product SKU</th><th style="text-align:left">Stage</th>
-        <th>Output Kg</th><th>Defect Kg</th><th style="text-align:left">Defect Type</th>
+        <th>Output Kg</th><th style="text-align:left">Defect Type</th><th>Reject Qty (No's)</th><th>Defect Kg</th>
         <th style="text-align:left">Classification</th><th style="text-align:left">Notes</th>
       </tr></thead>
       <tbody id="oee-rejects-tbody"></tbody>
@@ -564,8 +564,8 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
           <div class="tscroll" style="max-height:220px;"><table class="tcompact">
             <thead><tr>
               <th style="text-align:left">Date</th><th style="text-align:left">Shift</th><th style="text-align:left">Product SKU</th>
-              <th style="text-align:left">Stage</th><th>Output Kg</th><th>Defect Kg</th>
-              <th style="text-align:left">Defect Type</th><th style="text-align:left">Classification</th>
+              <th style="text-align:left">Stage</th><th>Output Kg</th><th style="text-align:left">Defect Type</th>
+              <th>Reject Qty (No's)</th><th>Defect Kg</th><th style="text-align:left">Classification</th>
             </tr></thead>
             <tbody id="oee-modal-rejects-tbody"></tbody>
           </table></div>
@@ -1734,6 +1734,7 @@ async function connectAll(){
         stage:      String(r['stage']||'').trim(),
         output_kg:  sf2(r['output_kg']),
         defect_type:String(r['defect_type']||'').trim(),
+        reject_qty_nos: sf2(r['defect__reject_qty_nos']||r['defect_reject_qty_nos']),
         defect_kg:  sf2(r['defect__reject_qty_kg']||r['defect_reject_qty_kg']||r['defect__reject_qty_kg_']),
         classification: String(r['defect_classification']||'').trim(),
         notes:      String(r['notes']||'').trim(),
@@ -1743,7 +1744,13 @@ async function connectAll(){
     qualityRejData = [];
   }
 
+  if(batchCsvRows.length>0){
+    console.log('Batch Master raw headers:', Object.keys(batchCsvRows[0]).join(', '));
+    console.log('Batch Master row[0]:', JSON.stringify(batchCsvRows[0]));
+    console.log('Batch Master row[1]:', JSON.stringify(batchCsvRows[1]));
+  }
   batchRows = batchCsvRows.length>0 ? parseBatchCSV(batchCsvRows) : [];
+  console.log('parseBatchCSV output sample:', batchRows.slice(0,3));
 
   // Refresh line filter dropdown with live line codes
   populateLineFilter();
@@ -2775,7 +2782,7 @@ function renderOeeModal(){
   const lineRejects = data.rejectRows.filter(r=>r.code===line.code);
   $('oee-modal-rejects-sub').textContent = lineRejects.length>0 ? `${lineRejects.length} reject entries this period` : 'No Quality Reject entries logged for this line/period yet';
   $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>
-    `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`
+    `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`
   ).join('') : '';
 
   // Per-line trend (Run Time vs Breakdown, by day) for this line only
@@ -2874,8 +2881,8 @@ function renderOEE(){
   if(wsub) wsub.textContent = data.rejectRows.length>0 ? `${data.rejectRows.length} entries · Total defect: ${data.rejectRows.reduce((s,r)=>s+r.defect_kg,0).toFixed(1)} kg` : 'No Quality Reject entries for this period yet';
   if(wtbody){
     wtbody.innerHTML = data.rejectRows.length>0 ? data.rejectRows.map(r=>
-      `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.code||r.line}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td style="text-align:left">${r.classification||'–'}</td><td style="text-align:left;color:var(--text2)">${r.notes||'–'}</td></tr>`
-    ).join('') : `<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:20px">No Quality Reject entries logged yet</td></tr>`;
+      `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.code||r.line}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td><td style="text-align:left;color:var(--text2)">${r.notes||'–'}</td></tr>`
+    ).join('') : `<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:20px">No Quality Reject entries logged yet</td></tr>`;
   }
 }
 
