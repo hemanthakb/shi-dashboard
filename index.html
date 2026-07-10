@@ -848,10 +848,17 @@ function buildWIPBalances(to){
     families[k].lots.push({date:r.date, kg:r.weight});
   });
 
+  // The Batch Master log itself only goes back to whenever the team started
+  // recording it — there is no visibility into WIP produced before that date.
+  // FG consumption is therefore only netted from that same start date onward;
+  // counting FG made from untracked, pre-logging stock would show a false
+  // deficit against batches that were never recorded in the first place.
+  const trackingStart = batchRows.reduce((min,r)=> (!min||r.date<min) ? r.date : min, null);
+
   function fgConsumedFor(fgSubstring){
-    if(!prodDataFull || !prodDataFull.length) return 0;
+    if(!prodDataFull || !prodDataFull.length || !trackingStart) return 0;
     const needle = fgSubstring.toLowerCase();
-    return prodDataFull.filter(r=>r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
+    return prodDataFull.filter(r=>r.date>=trackingStart && r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
       .reduce((s,r)=>s+(parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0),0);
   }
 
