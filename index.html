@@ -849,9 +849,9 @@ function buildWIPBalances(to){
   });
 
   function fgConsumedFor(fgSubstring){
-    if(!prodData || !prodData.length) return 0;
+    if(!prodDataFull || !prodDataFull.length) return 0;
     const needle = fgSubstring.toLowerCase();
-    return prodData.filter(r=>r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
+    return prodDataFull.filter(r=>r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
       .reduce((s,r)=>s+(parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0),0);
   }
 
@@ -1254,7 +1254,7 @@ function calcDailyCost(role, hours, isSundayOrPoya) {
   return r.fixedDaily + 3 * r.otHr + (hours - 11) * r.otHr;
 }
 
-let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodSources={};
+let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodDataFull=[], prodSources={};
 let hrLineManualOverride=false; // true once the user manually changes the Hourly Rates section's own line dropdown
 const PROMO_LINE = 'PARL'; // Promo/Rework line — repacks already-produced FG; excluded from kg, cost tracked separately
 
@@ -1664,7 +1664,7 @@ async function connectAll(){
       return undefined;
     };
 
-    prodData = prodRows.map(r => {
+    const prodDataAll = prodRows.map(r => {
       const vals = Object.values(r);
       // Find date value - look for value matching date pattern
       let dateVal='', lineVal='', prodVal='', stageVal='';
@@ -1715,12 +1715,19 @@ async function connectAll(){
         planned_labour_hr: r['planned_labour_hr']||vals[13],
         breakdown_min:     breakdownMin,
       };
-    }).filter(r => r.date && r.date >= from && r.date <= to);
+    }).filter(r => r.date);
+    // prodDataFull: same rows, NO date-range filtering — needed for the WIP
+    // module's cumulative-to-date FG consumption calc (a stock balance must
+    // net against ALL history up to "Date To", not just the visible window).
+    // prodData (windowed) stays exactly as before for every other section.
+    prodDataFull = prodDataAll;
+    prodData = prodDataAll.filter(r => r.date >= from && r.date <= to);
     
     console.log('prodData rows:', prodData.length, 'from', prodRows.length, 'total, range:', from, 'to', to);
     if(prodData.length > 0) console.log('Sample:', JSON.stringify(prodData[0]));
   } else {
     prodData = [];
+    prodDataFull = [];
   }
   if(srcRows.length>0) parseProdSources(srcRows);
 
