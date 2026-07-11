@@ -249,6 +249,8 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 .meter-kwh{font-size:20px;font-weight:700;color:var(--amber);}
 .meter-cost{font-size:11px;color:var(--text2);margin-top:3px;}
 .meter-eff{font-size:10px;color:var(--teal);margin-top:2px;font-weight:600;}
+.meter-days{font-size:10px;color:var(--text3);margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);}
+.meter-days b{color:var(--text2);font-weight:700;}
 
 /* ── BILL TRACKER ─────────────────────────────────────────────────────────── */
 .bill-row{display:flex;align-items:center;justify-content:space-between;
@@ -2531,15 +2533,30 @@ function renderElectricity(c){
     // cost from KWh × the bill rate for that row's month instead (see calcCosts).
     const cost=kwh*getElecRateForDate(r['date']);
     const kg=parseFloat(r['production_output_kg']||0)||0;
-    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
+    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0,days:new Set()};
     areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
+    // Count as a "running day" only when KWh was actually consumed that day —
+    // a logged row with 0 KWh means the area wasn't running, not that it ran.
+    // This is what lets us show KWh/day and cost/day averages so a big total
+    // isn't misread as "high usage" when it's really just more days running
+    // than a lower-total area.
+    if(kwh>0){
+      const nd=normaliseDate(r['date']||'');
+      if(nd) areaAgg[area].days.add(nd);
+    }
   });
 
   const areas=Object.keys(areaAgg);
   $('elec-meters').innerHTML=areas.length>0?areas.map(a=>{
     const d=areaAgg[a];
     const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'–';
-    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
+    const nDays=d.days.size;
+    const kwhPerDay=nDays>0?(d.kwh/nDays):0;
+    const costPerDay=nDays>0?(d.cost/nDays):0;
+    const daysLine=nDays>0
+      ? `<b>${nDays}</b> day${nDays===1?'':'s'} running · <b>${kwhPerDay.toFixed(1)}</b> KWh/day avg${costPerDay>0?` · <b>${fmtF(costPerDay)}</b>/day`:''}`
+      : `0 days running`;
+    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div><div class="meter-days">${daysLine}</div></div>`;
   }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
 
   // Daily KWh trend (total across areas/filtered line — not split by area)
