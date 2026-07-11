@@ -2581,6 +2581,43 @@ function renderElectricity(c){
   }
 }
 
+// ── CAPEX DEPRECIATION (computed client-side) ───────────────────────────────
+// Monthly Depreciation, YTD Depreciation and Net Book Value are all chained
+// Excel formulas in the Capex Register sheet (G=E/F/12, H=G×months-since-purchase,
+// I=E−H). Google Sheets' publish-to-web CSV cache recalculates shallow formulas
+// (G, which only references raw cells) reliably, but the deeper the formula
+// chain, the more likely the cached CSV export lags or exports blank — which is
+// why Net Book Value (2 levels deep) breaks far more often than Monthly
+// Depreciation (1 level deep), and why a "fix" (re-publishing the sheet) only
+// holds until the next edit. Instead of trusting I (or H), we derive both
+// straight from raw, reliably-exported cells: Cost, Useful Life and Purchase
+// Date. This also removes the dependency on the sheet's manually-typed "months
+// since purchase" number in H, which the team had to remember to update.
+function capexDepreciation(r){
+  const cost = parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
+  const usefulLifeYrs = parseFloat(String(r['useful_life_yrs']||'0').replace(/,/g,''))||0;
+  // Prefer computing monthly depreciation ourselves (cost/life/12 — raw cells
+  // only); fall back to the sheet's column only if useful life is missing.
+  const sheetMonthlyDepr = parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
+  const monthlyDepr = usefulLifeYrs>0 ? (cost/usefulLifeYrs/12) : sheetMonthlyDepr;
+
+  // Months elapsed since purchase — Capex uses the same real Excel Date-type
+  // export as Production DB/Engineering/Electricity, i.e. M/D/YYYY, so 'MD'.
+  const pd = normaliseDate(String(r['purchase_date']||''), 'MD');
+  let monthsElapsed = 0;
+  if(pd){
+    const [py,pm,pdd] = pd.split('-').map(Number);
+    const today = new Date();
+    monthsElapsed = (today.getFullYear()-py)*12 + ((today.getMonth()+1)-pm);
+    if(today.getDate() < pdd) monthsElapsed--;
+    monthsElapsed = Math.max(0, monthsElapsed);
+  }
+
+  const ytdDepr = Math.min(monthlyDepr*monthsElapsed, cost);
+  const nbv = Math.max(0, cost - ytdDepr);
+  return {cost, monthlyDepr, ytdDepr, nbv};
+}
+
 // ── RENDER CAPEX ──────────────────────────────────────────────────────────────
 function renderCapex(){
   if(capexData.length===0){
@@ -2588,9 +2625,11 @@ function renderCapex(){
     return;
   }
   const filteredCapex = getFilteredCapex();
-  const totalCost=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
-  const totalDepr=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
-  const totalNBV =filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
+  let totalCost=0, totalDepr=0, totalNBV=0;
+  filteredCapex.forEach(r=>{
+    const d = capexDepreciation(r);
+    totalCost += d.cost; totalDepr += d.monthlyDepr; totalNBV += d.nbv;
+  });
   const active   =filteredCapex.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
 
   $('capex-grid').innerHTML=`
@@ -2600,10 +2639,8 @@ function renderCapex(){
     <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
 
   $('capex-tbody').innerHTML=filteredCapex.map(r=>{
-    const cost=parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
-    const depr=parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
-    const nbv =parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0;
-    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(depr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
+    const d = capexDepreciation(r);
+    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(d.cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(d.monthlyDepr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(d.nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
   }).join('');
 }
 
