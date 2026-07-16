@@ -249,8 +249,6 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 .meter-kwh{font-size:20px;font-weight:700;color:var(--amber);}
 .meter-cost{font-size:11px;color:var(--text2);margin-top:3px;}
 .meter-eff{font-size:10px;color:var(--teal);margin-top:2px;font-weight:600;}
-.meter-days{font-size:10px;color:var(--text3);margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);}
-.meter-days b{color:var(--text2);font-weight:700;}
 
 /* ── BILL TRACKER ─────────────────────────────────────────────────────────── */
 .bill-row{display:flex;align-items:center;justify-content:space-between;
@@ -491,10 +489,6 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <div class="capex-note">ℹ Info panel only — Capex depreciation not included in unit cost calculations</div>
     </div>
     <div class="capex-grid" id="capex-grid"></div>
-    <div style="margin-top:14px;">
-      <div style="font-size:11px;font-weight:700;color:var(--gold-dk);text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">Monthly Capex Spend <span style="font-weight:400;text-transform:none;color:var(--text3);">(by purchase date, full history — not limited to the date filter above)</span></div>
-      <div id="capex-monthly" style="max-height:220px;overflow-y:auto;border:1px solid #e8d5a0;border-radius:var(--rs);background:#fff;"></div>
-    </div>
     <div id="capex-table-wrap" style="margin-top:12px;display:none;">
       <table style="width:100%;border-collapse:collapse;font-size:11px;">
         <thead><tr style="background:#e8d5a0;">
@@ -1511,26 +1505,15 @@ function getFilteredElec(){
     return area.includes(name) || area.includes(lf.toLowerCase());
   });
 }
-// Capex rows filtered to selected line AND selected date range (by Purchase
-// Date) — so the panel answers "what did we spend/own in this period", the
-// same way every other section on the dashboard respects Date From/To.
+// Capex rows filtered to selected line
 function getFilteredCapex(){
   const lf = getLineFilter();
-  const from = $('f-from').value, to = $('f-to').value;
-  let rows = capexData;
-  if(from && to){
-    // Capex uses the same real Excel Date-type export as Production DB/
-    // Engineering/Electricity, i.e. M/D/YYYY, so 'MD'.
-    rows = filterByDate(rows, 'purchase_date', from, to, 'MD');
-  }
-  if(lf !== 'all'){
-    const name = (LM[lf]||lf).toLowerCase();
-    rows = rows.filter(r=>{
-      const area = String(r['line__area']||r['line___area']||r['line_area']||'').toLowerCase();
-      return area.includes(name) || area.includes(lf.toLowerCase());
-    });
-  }
-  return rows;
+  if(lf === 'all') return capexData;
+  const name = (LM[lf]||lf).toLowerCase();
+  return capexData.filter(r=>{
+    const area = String(r['line__area']||r['line___area']||r['line_area']||'').toLowerCase();
+    return area.includes(name) || area.includes(lf.toLowerCase());
+  });
 }
 
 // Batch line codes excluded from CS volume (per project rules)
@@ -2533,30 +2516,15 @@ function renderElectricity(c){
     // cost from KWh × the bill rate for that row's month instead (see calcCosts).
     const cost=kwh*getElecRateForDate(r['date']);
     const kg=parseFloat(r['production_output_kg']||0)||0;
-    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0,days:new Set()};
+    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
     areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
-    // Count as a "running day" only when KWh was actually consumed that day —
-    // a logged row with 0 KWh means the area wasn't running, not that it ran.
-    // This is what lets us show KWh/day and cost/day averages so a big total
-    // isn't misread as "high usage" when it's really just more days running
-    // than a lower-total area.
-    if(kwh>0){
-      const nd=normaliseDate(r['date']||'');
-      if(nd) areaAgg[area].days.add(nd);
-    }
   });
 
   const areas=Object.keys(areaAgg);
   $('elec-meters').innerHTML=areas.length>0?areas.map(a=>{
     const d=areaAgg[a];
     const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'–';
-    const nDays=d.days.size;
-    const kwhPerDay=nDays>0?(d.kwh/nDays):0;
-    const costPerDay=nDays>0?(d.cost/nDays):0;
-    const daysLine=nDays>0
-      ? `<b>${nDays}</b> day${nDays===1?'':'s'} running · <b>${kwhPerDay.toFixed(1)}</b> KWh/day avg${costPerDay>0?` · <b>${fmtF(costPerDay)}</b>/day`:''}`
-      : `0 days running`;
-    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div><div class="meter-days">${daysLine}</div></div>`;
+    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
   }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
 
   // Daily KWh trend (total across areas/filtered line — not split by area)
@@ -2613,43 +2581,6 @@ function renderElectricity(c){
   }
 }
 
-// ── CAPEX DEPRECIATION (computed client-side) ───────────────────────────────
-// Monthly Depreciation, YTD Depreciation and Net Book Value are all chained
-// Excel formulas in the Capex Register sheet (G=E/F/12, H=G×months-since-purchase,
-// I=E−H). Google Sheets' publish-to-web CSV cache recalculates shallow formulas
-// (G, which only references raw cells) reliably, but the deeper the formula
-// chain, the more likely the cached CSV export lags or exports blank — which is
-// why Net Book Value (2 levels deep) breaks far more often than Monthly
-// Depreciation (1 level deep), and why a "fix" (re-publishing the sheet) only
-// holds until the next edit. Instead of trusting I (or H), we derive both
-// straight from raw, reliably-exported cells: Cost, Useful Life and Purchase
-// Date. This also removes the dependency on the sheet's manually-typed "months
-// since purchase" number in H, which the team had to remember to update.
-function capexDepreciation(r){
-  const cost = parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
-  const usefulLifeYrs = parseFloat(String(r['useful_life_yrs']||'0').replace(/,/g,''))||0;
-  // Prefer computing monthly depreciation ourselves (cost/life/12 — raw cells
-  // only); fall back to the sheet's column only if useful life is missing.
-  const sheetMonthlyDepr = parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
-  const monthlyDepr = usefulLifeYrs>0 ? (cost/usefulLifeYrs/12) : sheetMonthlyDepr;
-
-  // Months elapsed since purchase — Capex uses the same real Excel Date-type
-  // export as Production DB/Engineering/Electricity, i.e. M/D/YYYY, so 'MD'.
-  const pd = normaliseDate(String(r['purchase_date']||''), 'MD');
-  let monthsElapsed = 0;
-  if(pd){
-    const [py,pm,pdd] = pd.split('-').map(Number);
-    const today = new Date();
-    monthsElapsed = (today.getFullYear()-py)*12 + ((today.getMonth()+1)-pm);
-    if(today.getDate() < pdd) monthsElapsed--;
-    monthsElapsed = Math.max(0, monthsElapsed);
-  }
-
-  const ytdDepr = Math.min(monthlyDepr*monthsElapsed, cost);
-  const nbv = Math.max(0, cost - ytdDepr);
-  return {cost, monthlyDepr, ytdDepr, nbv};
-}
-
 // ── RENDER CAPEX ──────────────────────────────────────────────────────────────
 function renderCapex(){
   if(capexData.length===0){
@@ -2657,85 +2588,22 @@ function renderCapex(){
     return;
   }
   const filteredCapex = getFilteredCapex();
-  let totalCost=0, totalDepr=0, totalNBV=0;
-  filteredCapex.forEach(r=>{
-    const d = capexDepreciation(r);
-    totalCost += d.cost; totalDepr += d.monthlyDepr; totalNBV += d.nbv;
-  });
+  const totalCost=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalDepr=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalNBV =filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
   const active   =filteredCapex.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
 
-  const from = $('f-from').value, to = $('f-to').value;
-  const noteEl = document.querySelector('#capex-panel .capex-note');
-  if(noteEl){
-    noteEl.textContent = (from && to)
-      ? `ℹ Showing assets purchased ${from} to ${to} — depreciation not included in unit cost calculations`
-      : 'ℹ Info panel only — Capex depreciation not included in unit cost calculations';
-  }
-
   $('capex-grid').innerHTML=`
-    <div class="capex-stat"><div class="capex-stat-label">Assets Purchased (Period)</div><div class="capex-stat-val">${filteredCapex.length}</div><div class="capex-stat-sub">${active} active</div></div>
-    <div class="capex-stat"><div class="capex-stat-label">Capex Spend (Period)</div><div class="capex-stat-val">${fmt(totalCost)}</div><div class="capex-stat-sub">Original cost, this period</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Total Assets</div><div class="capex-stat-val">${filteredCapex.length}</div><div class="capex-stat-sub">${active} active</div></div>
+    <div class="capex-stat"><div class="capex-stat-label">Total Capex Value</div><div class="capex-stat-val">${fmt(totalCost)}</div><div class="capex-stat-sub">Original cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Monthly Depreciation</div><div class="capex-stat-val">${fmt(totalDepr)}</div><div class="capex-stat-sub">Not in unit cost</div></div>
-    <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value, this period's assets</div></div>`;
-
-  // Monthly Capex Spend tracker — grouped by Purchase Date month, across the
-  // asset register's full history (respects the Production Line filter only,
-  // not the Date From/To range above, so the period cards and this trend
-  // give two different but complementary views: "spend in this window" vs
-  // "spend by month over time").
-  const monthlyEl = $('capex-monthly');
-  if(monthlyEl){
-    const lf = getLineFilter();
-    let allTimeCapex = capexData;
-    if(lf !== 'all'){
-      const name = (LM[lf]||lf).toLowerCase();
-      allTimeCapex = capexData.filter(r=>{
-        const area = String(r['line__area']||r['line___area']||r['line_area']||'').toLowerCase();
-        return area.includes(name) || area.includes(lf.toLowerCase());
-      });
-    }
-    const MONTH_LABELS=['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const monthMap = {};
-    allTimeCapex.forEach(r=>{
-      const pd = normaliseDate(String(r['purchase_date']||''), 'MD');
-      if(!pd) return;
-      const key = pd.slice(0,7); // YYYY-MM
-      const d = capexDepreciation(r);
-      if(!monthMap[key]) monthMap[key] = {cost:0, count:0};
-      monthMap[key].cost += d.cost;
-      monthMap[key].count += 1;
-    });
-    const monthKeys = Object.keys(monthMap).sort();
-    if(monthKeys.length===0){
-      monthlyEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px;">No Purchase Date data available for a monthly breakdown</div>';
-    } else {
-      const grandTotal = monthKeys.reduce((s,k)=>s+monthMap[k].cost,0);
-      const grandCount = monthKeys.reduce((s,k)=>s+monthMap[k].count,0);
-      monthlyEl.innerHTML = `
-        <div style="display:flex;padding:6px 14px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--text3);">
-          <span style="min-width:110px">Month</span><span style="min-width:90px;text-align:right">Assets</span><span style="min-width:120px;text-align:right">Capex Spend (LKR)</span>
-        </div>
-        ${monthKeys.map(k=>{
-          const [y,m] = k.split('-').map(Number);
-          const label = `${MONTH_LABELS[m-1]} ${y}`;
-          const row = monthMap[k];
-          return`<div class="bill-row">
-            <span class="bill-month">${label}</span>
-            <span class="bill-kwh">${row.count}</span>
-            <span class="bill-amt" style="min-width:120px">${fmt(row.cost)}</span>
-          </div>`;
-        }).join('')}
-        <div class="bill-row" style="font-weight:700;background:var(--blue-lt)">
-          <span class="bill-month">All-Time Total</span>
-          <span class="bill-kwh">${grandCount}</span>
-          <span class="bill-amt" style="min-width:120px">${fmt(grandTotal)}</span>
-        </div>`;
-    }
-  }
+    <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
 
   $('capex-tbody').innerHTML=filteredCapex.map(r=>{
-    const d = capexDepreciation(r);
-    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(d.cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(d.monthlyDepr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(d.nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
+    const cost=parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
+    const depr=parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
+    const nbv =parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0;
+    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(depr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
   }).join('');
 }
 
@@ -2926,15 +2794,18 @@ function renderOeeModal(){
   $('oee-modal-stats').innerHTML = `
     <div class="maint-type-card"><div class="maint-type-label">Availability</div><div class="maint-type-val" style="color:var(--blue)">${pctStr(line.avail)}</div><div class="maint-type-sub">${line.runHrMin.toFixed(0)} min run · ${line.breakdownMin.toFixed(0)} min logged downtime</div></div>
     <div class="maint-type-card"><div class="maint-type-label">Performance</div><div class="maint-type-val" style="color:var(--amber)">${pctStr(line.perf)}</div><div class="maint-type-sub">${Math.round(line.actualCS).toLocaleString()} of ${Math.round(line.plannedCS).toLocaleString()} CS</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Quality</div><div class="maint-type-val" style="color:var(--teal)">${pctStr(line.quality)}</div><div class="maint-type-sub">${line.outputKg>0?`${line.defectKg.toFixed(1)} kg defect of ${line.outputKg.toFixed(1)} kg`:'No Quality Reject entries this period'}</div></div>
+    <div class="maint-type-card"><div class="maint-type-label">Quality</div><div class="maint-type-val" style="color:var(--teal)">${pctStr(line.quality)}</div><div class="maint-type-sub">${line.outputKg>0?`${line.defectKg.toFixed(1)} kg defect of ${line.outputKg.toFixed(1)} kg`:'No Quality Reject entries this period'}<br><span style="color:var(--text3)">WIP material loss only — packaging rejects (No's) tracked separately below, not included here</span></div></div>
     <div class="maint-type-card"><div class="maint-type-label">OEE</div><div class="maint-type-val" style="color:var(--purple)">${pctStr(line.oee)}</div><div class="maint-type-sub">Availability × Performance × Quality</div></div>`;
 
   // Breakdown-reason-free note if no downtime logged
   const lineRejects = data.rejectRows.filter(r=>r.code===line.code);
-  $('oee-modal-rejects-sub').textContent = lineRejects.length>0 ? `${lineRejects.length} reject entries this period` : 'No Quality Reject entries logged for this line/period yet';
-  $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>
-    `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`
-  ).join('') : '';
+  const packagingOnlyCount = lineRejects.filter(r=>(r.defect_kg||0)===0 && (r.reject_qty_nos||0)>0).length;
+  const rejectsSubBase = lineRejects.length>0 ? `${lineRejects.length} reject entries this period` : 'No Quality Reject entries logged for this line/period yet';
+  $('oee-modal-rejects-sub').textContent = packagingOnlyCount>0 ? `${rejectsSubBase} · ${packagingOnlyCount} packaging-only (No's) — excluded from Quality %` : rejectsSubBase;
+  $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>{
+    const isPackagingOnly = (r.defect_kg||0)===0 && (r.reject_qty_nos||0)>0;
+    return `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}${isPackagingOnly?' <span style="color:var(--text3);font-size:9px;">(pkg)</span>':''}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`;
+  }).join('') : '';
 
   // Per-line trend (Run Time vs Breakdown, by day) for this line only
   const lf0 = getLineFilter();
