@@ -2665,7 +2665,29 @@ function resolveLineCode(nameOrCode){
 //   Defaults to 100% wherever no reject rows exist yet for that line/period
 //   (sheet is new — approved format, not yet populated) so OEE never zeroes
 //   out or breaks while QA ramps up data entry.
+//   If a reject row logs real Defect Kg but Output Kg was left blank/0 (QA
+//   entry gap), fall back to Production DB's actual output kg for that
+//   line+date (matched to the row's product where possible, else the whole
+//   line/date total) so a genuine WIP-kg loss isn't silently dropped to 100%.
+//   Confirmed with HOM: a logged kg-based defect must reduce Quality against
+//   the kg actually produced in that run, not disappear for lack of a
+//   populated Output Kg cell.
 // Batch/PARL lines are excluded entirely (matches existing volume/efficiency rule).
+function findProdOutputKgFallback(code, date, productSku){
+  const src = (prodDataFull && prodDataFull.length ? prodDataFull : prodData) || [];
+  const rowsForDate = src.filter(r=>r.date===date && r.line===code);
+  if(rowsForDate.length===0) return 0;
+  const norm = s => String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+  const target = norm(productSku);
+  if(target){
+    const matched = rowsForDate.filter(r=>{
+      const p = norm(r.product_sku);
+      return p && (p.includes(target)||target.includes(p));
+    });
+    if(matched.length>0) return matched.reduce((s,r)=>s+(parseFloat(r.actual_out_put_kg)||0),0);
+  }
+  return rowsForDate.reduce((s,r)=>s+(parseFloat(r.actual_out_put_kg)||0),0);
+}
 function calcOEE(from, to){
   const lf = getLineFilter();
   const sf3 = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
@@ -2698,7 +2720,13 @@ function calcOEE(from, to){
   const qualAgg = {};
   qRows.forEach(r=>{
     if(!qualAgg[r.code]) qualAgg[r.code] = {outputKg:0,defectKg:0};
-    qualAgg[r.code].outputKg += r.output_kg||0;
+    let outKg = r.output_kg||0;
+    if(outKg<=0 && (r.defect_kg||0)>0){
+      outKg = findProdOutputKgFallback(r.code, r.date, r.product_sku);
+      r.output_kg_estimated = outKg>0;
+    }
+    r.output_kg_effective = outKg;
+    qualAgg[r.code].outputKg += outKg;
     qualAgg[r.code].defectKg += r.defect_kg||0;
   });
 
@@ -2804,7 +2832,8 @@ function renderOeeModal(){
   $('oee-modal-rejects-sub').textContent = packagingOnlyCount>0 ? `${rejectsSubBase} · ${packagingOnlyCount} packaging-only (No's) — excluded from Quality %` : rejectsSubBase;
   $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>{
     const isPackagingOnly = (r.defect_kg||0)===0 && (r.reject_qty_nos||0)>0;
-    return `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}${isPackagingOnly?' <span style="color:var(--text3);font-size:9px;">(pkg)</span>':''}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`;
+    const outKgDisplay = r.output_kg_estimated ? `${(r.output_kg_effective||0).toFixed(1)} <span style="color:var(--text3);font-size:9px;">(est.)</span>` : r.output_kg.toFixed(1);
+    return `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${outKgDisplay}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}${isPackagingOnly?' <span style="color:var(--text3);font-size:9px;">(pkg)</span>':''}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`;
   }).join('') : '';
 
   // Per-line trend (Run Time vs Breakdown, by day) for this line only
@@ -2902,9 +2931,10 @@ function renderOEE(){
   const wsub = $('oee-rejects-sub');
   if(wsub) wsub.textContent = data.rejectRows.length>0 ? `${data.rejectRows.length} entries · Total defect: ${data.rejectRows.reduce((s,r)=>s+r.defect_kg,0).toFixed(1)} kg` : 'No Quality Reject entries for this period yet';
   if(wtbody){
-    wtbody.innerHTML = data.rejectRows.length>0 ? data.rejectRows.map(r=>
-      `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.code||r.line}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td><td style="text-align:left;color:var(--text2)">${r.notes||'–'}</td></tr>`
-    ).join('') : `<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:20px">No Quality Reject entries logged yet</td></tr>`;
+    wtbody.innerHTML = data.rejectRows.length>0 ? data.rejectRows.map(r=>{
+      const outKgDisplay = r.output_kg_estimated ? `${(r.output_kg_effective||0).toFixed(1)} <span style="color:var(--text3);font-size:9px;">(est.)</span>` : r.output_kg.toFixed(1);
+      return `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.code||r.line}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${outKgDisplay}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td><td style="text-align:left;color:var(--text2)">${r.notes||'–'}</td></tr>`;
+    }).join('') : `<tr><td colspan="11" style="text-align:center;color:var(--text3);padding:20px">No Quality Reject entries logged yet</td></tr>`;
   }
 }
 
