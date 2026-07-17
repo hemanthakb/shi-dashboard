@@ -249,6 +249,8 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 .meter-kwh{font-size:20px;font-weight:700;color:var(--amber);}
 .meter-cost{font-size:11px;color:var(--text2);margin-top:3px;}
 .meter-eff{font-size:10px;color:var(--teal);margin-top:2px;font-weight:600;}
+.meter-days{font-size:10px;color:var(--text3);margin-top:5px;padding-top:5px;border-top:1px dashed var(--border);}
+.meter-days b{color:var(--text2);font-weight:700;}
 
 /* ── BILL TRACKER ─────────────────────────────────────────────────────────── */
 .bill-row{display:flex;align-items:center;justify-content:space-between;
@@ -2516,15 +2518,30 @@ function renderElectricity(c){
     // cost from KWh × the bill rate for that row's month instead (see calcCosts).
     const cost=kwh*getElecRateForDate(r['date']);
     const kg=parseFloat(r['production_output_kg']||0)||0;
-    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0};
+    if(!areaAgg[area])areaAgg[area]={kwh:0,cost:0,kg:0,days:new Set()};
     areaAgg[area].kwh+=kwh; areaAgg[area].cost+=cost; areaAgg[area].kg+=kg;
+    // Count as a "running day" only when KWh was actually consumed that day —
+    // a logged row with 0 KWh means the area wasn't running, not that it ran.
+    // This is what lets us show KWh/day and cost/day averages so a big total
+    // isn't misread as "high usage" when it's really just more days running
+    // than a lower-total area.
+    if(kwh>0){
+      const nd=normaliseDate(r['date']||'');
+      if(nd) areaAgg[area].days.add(nd);
+    }
   });
 
   const areas=Object.keys(areaAgg);
   $('elec-meters').innerHTML=areas.length>0?areas.map(a=>{
     const d=areaAgg[a];
     const eff=d.kg>0?(d.kwh/d.kg).toFixed(3):'–';
-    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div></div>`;
+    const nDays=d.days.size;
+    const kwhPerDay=nDays>0?(d.kwh/nDays):0;
+    const costPerDay=nDays>0?(d.cost/nDays):0;
+    const daysLine=nDays>0
+      ? `<b>${nDays}</b> day${nDays===1?'':'s'} running · <b>${kwhPerDay.toFixed(1)}</b> KWh/day avg${costPerDay>0?` · <b>${fmtF(costPerDay)}</b>/day`:''}`
+      : `0 days running`;
+    return`<div class="elec-meter"><div class="meter-area">${a}</div><div class="meter-kwh">${d.kwh.toFixed(1)} <span style="font-size:12px;font-weight:400">KWh</span></div><div class="meter-cost">${d.cost>0?fmtF(d.cost):'–'}</div><div class="meter-eff">${eff!=='–'?eff+' KWh/kg':''}</div><div class="meter-days">${daysLine}</div></div>`;
   }).join(''):`<div class="elec-meter" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:20px">Connect Electricity Daily data to see area consumption</div>`;
 
   // Daily KWh trend (total across areas/filtered line — not split by area)
@@ -2581,36 +2598,6 @@ function renderElectricity(c){
   }
 }
 
-// ── CAPEX FINANCIALS (CLIENT-SIDE) ─────────────────────────────────────────────
-// Sheet formulas: Monthly Depr = Cost/UsefulLifeYrs/12 (simple — exports fine).
-// YTD Depr = Monthly Depr × months-since-purchase, and NBV = Cost − YTD Depr —
-// both depend on a TODAY()-based chained formula, which (like other computed
-// columns in this workbook) does not export reliably via Google Sheets CSV.
-// Cost, Useful Life, and Purchase Date are raw cells and always export fine,
-// so compute Monthly/YTD Depreciation and NBV from those directly instead of
-// trusting the sheet's own depreciation/NBV columns.
-function computeCapexFinancials(r){
-  const cost = parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
-  const usefulLifeYrs = parseFloat(String(r['useful_life_yrs']||r['useful_life']||'0').replace(/,/g,''))||0;
-  const purchaseDate = normaliseDate(String(r['purchase_date']||'').trim(), 'DM');
-  const monthlyDepr = usefulLifeYrs>0 ? cost/usefulLifeYrs/12 : 0;
-  let monthsSincePurchase = 0;
-  if(purchaseDate){
-    const [py,pm,pd] = purchaseDate.split('-').map(Number);
-    if(py && pm){
-      const today = new Date();
-      monthsSincePurchase = (today.getFullYear()-py)*12 + ((today.getMonth()+1)-pm);
-      if(today.getDate() < (pd||1)) monthsSincePurchase -= 1;
-      monthsSincePurchase = Math.max(0, monthsSincePurchase);
-    }
-  }
-  const usefulLifeMonths = usefulLifeYrs*12;
-  const cappedMonths = usefulLifeMonths>0 ? Math.min(monthsSincePurchase, usefulLifeMonths) : monthsSincePurchase;
-  const ytdDepr = monthlyDepr*cappedMonths;
-  const nbv = Math.max(0, cost-ytdDepr);
-  return {cost, monthlyDepr, ytdDepr, nbv};
-}
-
 // ── RENDER CAPEX ──────────────────────────────────────────────────────────────
 function renderCapex(){
   if(capexData.length===0){
@@ -2618,10 +2605,9 @@ function renderCapex(){
     return;
   }
   const filteredCapex = getFilteredCapex();
-  const fin = filteredCapex.map(r=>({r, ...computeCapexFinancials(r)}));
-  const totalCost=fin.reduce((s,f)=>s+f.cost,0);
-  const totalDepr=fin.reduce((s,f)=>s+f.monthlyDepr,0);
-  const totalNBV =fin.reduce((s,f)=>s+f.nbv,0);
+  const totalCost=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalDepr=filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0),0);
+  const totalNBV =filteredCapex.reduce((s,r)=>s+(parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0),0);
   const active   =filteredCapex.filter(r=>String(r['status']||'').toLowerCase()==='active').length;
 
   $('capex-grid').innerHTML=`
@@ -2630,8 +2616,11 @@ function renderCapex(){
     <div class="capex-stat"><div class="capex-stat-label">Monthly Depreciation</div><div class="capex-stat-val">${fmt(totalDepr)}</div><div class="capex-stat-sub">Not in unit cost</div></div>
     <div class="capex-stat"><div class="capex-stat-label">Net Book Value</div><div class="capex-stat-val">${fmt(totalNBV)}</div><div class="capex-stat-sub">Current value</div></div>`;
 
-  $('capex-tbody').innerHTML=fin.map(({r,cost,monthlyDepr,nbv})=>{
-    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(monthlyDepr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
+  $('capex-tbody').innerHTML=filteredCapex.map(r=>{
+    const cost=parseFloat(String(r['cost_lkr']||'0').replace(/,/g,''))||0;
+    const depr=parseFloat(String(r['monthly_depreciation_lkr']||'0').replace(/,/g,''))||0;
+    const nbv =parseFloat(String(r['net_book_value_lkr']||'0').replace(/,/g,''))||0;
+    return`<tr style="border-bottom:1px solid #f0ead0"><td style="padding:6px 10px">${r['asset_description']||'–'}</td><td style="padding:6px 10px">${r['line__area']||r['line___area']||r['line_area']||'–'}</td><td style="padding:6px 10px;text-align:right">${fmtF(cost)}</td><td style="padding:6px 10px;text-align:right">${fmtF(depr)}</td><td style="padding:6px 10px;text-align:right">${fmtF(nbv)}</td><td style="padding:6px 10px;text-align:center">${r['status']||'–'}</td></tr>`;
   }).join('');
 }
 
@@ -2693,13 +2682,6 @@ function resolveLineCode(nameOrCode){
 //   Defaults to 100% wherever no reject rows exist yet for that line/period
 //   (sheet is new — approved format, not yet populated) so OEE never zeroes
 //   out or breaks while QA ramps up data entry.
-//   If a reject row logs real Defect Kg but Output Kg was left blank/0 (QA
-//   entry gap), fall back to Production DB's actual output kg for that
-//   line+date (matched to the row's product where possible, else the whole
-//   line/date total) so a genuine WIP-kg loss isn't silently dropped to 100%.
-//   Confirmed with HOM: a logged kg-based defect must reduce Quality against
-//   the kg actually produced in that run, not disappear for lack of a
-//   populated Output Kg cell.
 // Batch/PARL lines are excluded entirely (matches existing volume/efficiency rule).
 function calcOEE(from, to){
   const lf = getLineFilter();
@@ -2713,13 +2695,12 @@ function calcOEE(from, to){
   // Per-line raw aggregates
   const lineAgg = {};
   rows.forEach(r=>{
-    if(!lineAgg[r.line]) lineAgg[r.line] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,actualOutputKg:0};
+    if(!lineAgg[r.line]) lineAgg[r.line] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0};
     const g = lineAgg[r.line];
     g.runHrMin     += (r.run_time_hr||0)*60;
     g.breakdownMin += (r.breakdown_min||0);
     g.plannedCS    += sf3(r.planned_out_put_cs);
     g.actualCS     += sf3(r.actual_out_put_cs);
-    g.actualOutputKg += sf3(r.actual_out_put_kg);
   });
 
   // Quality Rejects — filter to period + resolved line code + (line filter)
@@ -2731,16 +2712,10 @@ function calcOEE(from, to){
     return true;
   }).map(r=>({...r, code: r.code||resolveLineCode(r.line)}));
 
-  // Quality denominator = TOTAL Actual Output Kg the line produced across the
-  // whole selected period (Production DB), not matched row-by-row to reject
-  // dates. Confirmed with HOM: QA logs a reject on the date it's discovered/
-  // reported, which often doesn't match the exact day that batch was
-  // produced — so period-level Total Defect Kg / Total Output Kg is the
-  // correct basis, not per-row date matching.
   const qualAgg = {};
   qRows.forEach(r=>{
     if(!qualAgg[r.code]) qualAgg[r.code] = {outputKg:0,defectKg:0};
-    qualAgg[r.code].outputKg += r.output_kg||0; // kept for reference/display only
+    qualAgg[r.code].outputKg += r.output_kg||0;
     qualAgg[r.code].defectKg += r.defect_kg||0;
   });
 
@@ -2753,19 +2728,14 @@ function calcOEE(from, to){
     const g = lineAgg[code];
     const {avail,perf} = ratios(g);
     const q = qualAgg[code];
-    const totalDefectKg = q ? q.defectKg : 0;
-    // Prefer Production DB's period-total output kg; fall back to the
-    // reject sheet's own reported Output Kg sum only if Production DB has
-    // no output at all for that line/period.
-    const qualityOutputKg = g.actualOutputKg>0 ? g.actualOutputKg : (q ? q.outputKg : 0);
-    const quality = qualityOutputKg>0 ? Math.max(0,Math.min(1, 1-(totalDefectKg/qualityOutputKg))) : 1;
+    const quality = (q && q.outputKg>0) ? Math.max(0,Math.min(1, 1-(q.defectKg/q.outputKg))) : 1;
     const oee = (avail??1)*(perf??1)*quality;
     return {
       code, name: lname(code), tier: LINE_TIER[code]||'Unclassified',
       avail, perf, quality, oee,
       runHrMin:g.runHrMin, breakdownMin:g.breakdownMin,
       plannedCS:g.plannedCS, actualCS:g.actualCS,
-      outputKg: qualityOutputKg, defectKg: totalDefectKg,
+      outputKg: q?q.outputKg:0, defectKg: q?q.defectKg:0,
     };
   }).sort((a,b)=>b.oee-a.oee);
 
@@ -2841,18 +2811,15 @@ function renderOeeModal(){
   $('oee-modal-stats').innerHTML = `
     <div class="maint-type-card"><div class="maint-type-label">Availability</div><div class="maint-type-val" style="color:var(--blue)">${pctStr(line.avail)}</div><div class="maint-type-sub">${line.runHrMin.toFixed(0)} min run · ${line.breakdownMin.toFixed(0)} min logged downtime</div></div>
     <div class="maint-type-card"><div class="maint-type-label">Performance</div><div class="maint-type-val" style="color:var(--amber)">${pctStr(line.perf)}</div><div class="maint-type-sub">${Math.round(line.actualCS).toLocaleString()} of ${Math.round(line.plannedCS).toLocaleString()} CS</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Quality</div><div class="maint-type-val" style="color:var(--teal)">${pctStr(line.quality)}</div><div class="maint-type-sub">${line.outputKg>0?`${line.defectKg.toFixed(1)} kg defect of ${line.outputKg.toFixed(1)} kg`:'No Quality Reject entries this period'}<br><span style="color:var(--text3)">WIP material loss only — packaging rejects (No's) tracked separately below, not included here</span></div></div>
+    <div class="maint-type-card"><div class="maint-type-label">Quality</div><div class="maint-type-val" style="color:var(--teal)">${pctStr(line.quality)}</div><div class="maint-type-sub">${line.outputKg>0?`${line.defectKg.toFixed(1)} kg defect of ${line.outputKg.toFixed(1)} kg`:'No Quality Reject entries this period'}</div></div>
     <div class="maint-type-card"><div class="maint-type-label">OEE</div><div class="maint-type-val" style="color:var(--purple)">${pctStr(line.oee)}</div><div class="maint-type-sub">Availability × Performance × Quality</div></div>`;
 
   // Breakdown-reason-free note if no downtime logged
   const lineRejects = data.rejectRows.filter(r=>r.code===line.code);
-  const packagingOnlyCount = lineRejects.filter(r=>(r.defect_kg||0)===0 && (r.reject_qty_nos||0)>0).length;
-  const rejectsSubBase = lineRejects.length>0 ? `${lineRejects.length} reject entries this period` : 'No Quality Reject entries logged for this line/period yet';
-  $('oee-modal-rejects-sub').textContent = packagingOnlyCount>0 ? `${rejectsSubBase} · ${packagingOnlyCount} packaging-only (No's) — excluded from Quality %` : rejectsSubBase;
-  $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>{
-    const isPackagingOnly = (r.defect_kg||0)===0 && (r.reject_qty_nos||0)>0;
-    return `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}${isPackagingOnly?' <span style="color:var(--text3);font-size:9px;">(pkg)</span>':''}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`;
-  }).join('') : '';
+  $('oee-modal-rejects-sub').textContent = lineRejects.length>0 ? `${lineRejects.length} reject entries this period` : 'No Quality Reject entries logged for this line/period yet';
+  $('oee-modal-rejects-tbody').innerHTML = lineRejects.length>0 ? lineRejects.map(r=>
+    `<tr><td style="text-align:left">${r.date}</td><td style="text-align:left">${r.shift||'–'}</td><td style="text-align:left" class="tname" title="${r.product_sku}">${r.product_sku||'–'}</td><td style="text-align:left">${r.stage||'–'}</td><td>${r.output_kg.toFixed(1)}</td><td style="text-align:left">${r.defect_type||'–'}</td><td>${r.reject_qty_nos?r.reject_qty_nos.toLocaleString():'–'}</td><td>${r.defect_kg.toFixed(2)}</td><td style="text-align:left">${r.classification||'–'}</td></tr>`
+  ).join('') : '';
 
   // Per-line trend (Run Time vs Breakdown, by day) for this line only
   const lf0 = getLineFilter();
