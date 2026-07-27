@@ -1718,6 +1718,7 @@ async function connectAll(){
         stage:             stageVal,
         run_time_hr:       sf(r['run_time_hr']||vals[12]),
         planned_out_put_cs:r['planned_out_put_cs']||vals[13],
+        planned_out_put_kg:r['planned_out_put_kg'],
         actual_out_put_cs: r['actual_out_put_cs']||vals[15],
         actual_out_put_kg: r['actual_out_put_kg']||vals[16],
         actual_labour_hr:  r['actual_labour_hr']||r['total_labor_hr']||vals[10],
@@ -2695,12 +2696,16 @@ function calcOEE(from, to){
   // Per-line raw aggregates
   const lineAgg = {};
   rows.forEach(r=>{
-    if(!lineAgg[r.line]) lineAgg[r.line] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0};
+    if(!lineAgg[r.line]) lineAgg[r.line] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,plannedKg:0,actualKg:0,plannedLabHr:0,actualLabHr:0};
     const g = lineAgg[r.line];
     g.runHrMin     += (r.run_time_hr||0)*60;
     g.breakdownMin += (r.breakdown_min||0);
     g.plannedCS    += sf3(r.planned_out_put_cs);
     g.actualCS     += sf3(r.actual_out_put_cs);
+    g.plannedKg    += sf3(r.planned_out_put_kg);
+    g.actualKg     += sf3(r.actual_out_put_kg);
+    g.plannedLabHr += sf3(r.planned_labour_hr);
+    g.actualLabHr  += sf3(r.actual_labour_hr);
   });
 
   // Quality Rejects — filter to period + resolved line code + (line filter)
@@ -2719,10 +2724,18 @@ function calcOEE(from, to){
     qualAgg[r.code].defectKg += r.defect_kg||0;
   });
 
-  const ratios = g => ({
-    avail: (g.runHrMin+g.breakdownMin)>0 ? g.runHrMin/(g.runHrMin+g.breakdownMin) : null,
-    perf:  g.plannedCS>0 ? g.actualCS/g.plannedCS : null,
-  });
+  // Performance — confirmed against the Production DB's own EFFICIENCY column
+  // (09 Jul 2026): (Actual Output Kg / Actual Labour Hr) ÷ (Planned Output Kg /
+  // Planned Labour Hr) — i.e. actual output rate vs planned output rate, NOT
+  // Actual CS / Planned CS. Verified exact match on live rows (51.20%, 26.07%).
+  const ratios = g => {
+    const actualRate  = g.actualLabHr>0  ? g.actualKg/g.actualLabHr   : null;
+    const plannedRate = g.plannedLabHr>0 ? g.plannedKg/g.plannedLabHr : null;
+    return {
+      avail: (g.runHrMin+g.breakdownMin)>0 ? g.runHrMin/(g.runHrMin+g.breakdownMin) : null,
+      perf:  (actualRate!=null && plannedRate>0) ? actualRate/plannedRate : null,
+    };
+  };
 
   const lines = Object.keys(lineAgg).map(code=>{
     const g = lineAgg[code];
@@ -2735,16 +2748,19 @@ function calcOEE(from, to){
       avail, perf, quality, oee,
       runHrMin:g.runHrMin, breakdownMin:g.breakdownMin,
       plannedCS:g.plannedCS, actualCS:g.actualCS,
+      plannedKg:g.plannedKg, actualKg:g.actualKg,
+      plannedLabHr:g.plannedLabHr, actualLabHr:g.actualLabHr,
       outputKg: q?q.outputKg:0, defectKg: q?q.defectKg:0,
     };
   }).sort((a,b)=>b.oee-a.oee);
 
   // Tier rollups — aggregate raw sums first, then compute ratios (avoids
   // small-line bias from averaging percentages directly).
-  const tierRaw = {}; OEE_TIERS.forEach(t=>tierRaw[t]={runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,outputKg:0,defectKg:0,lineCount:0});
+  const tierRaw = {}; OEE_TIERS.forEach(t=>tierRaw[t]={runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,plannedKg:0,actualKg:0,plannedLabHr:0,actualLabHr:0,outputKg:0,defectKg:0,lineCount:0});
   lines.forEach(l=>{
     const t = tierRaw[l.tier]; if(!t) return;
     t.runHrMin+=l.runHrMin; t.breakdownMin+=l.breakdownMin; t.plannedCS+=l.plannedCS; t.actualCS+=l.actualCS;
+    t.plannedKg+=l.plannedKg; t.actualKg+=l.actualKg; t.plannedLabHr+=l.plannedLabHr; t.actualLabHr+=l.actualLabHr;
     t.outputKg+=l.outputKg; t.defectKg+=l.defectKg; t.lineCount++;
   });
   const tiers = {};
@@ -2756,8 +2772,8 @@ function calcOEE(from, to){
   });
 
   // Overall (all non-excluded lines combined)
-  const overallRaw = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,outputKg:0,defectKg:0,lineCount:lines.length};
-  lines.forEach(l=>{ overallRaw.runHrMin+=l.runHrMin; overallRaw.breakdownMin+=l.breakdownMin; overallRaw.plannedCS+=l.plannedCS; overallRaw.actualCS+=l.actualCS; overallRaw.outputKg+=l.outputKg; overallRaw.defectKg+=l.defectKg; });
+  const overallRaw = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,plannedKg:0,actualKg:0,plannedLabHr:0,actualLabHr:0,outputKg:0,defectKg:0,lineCount:lines.length};
+  lines.forEach(l=>{ overallRaw.runHrMin+=l.runHrMin; overallRaw.breakdownMin+=l.breakdownMin; overallRaw.plannedCS+=l.plannedCS; overallRaw.actualCS+=l.actualCS; overallRaw.plannedKg+=l.plannedKg; overallRaw.actualKg+=l.actualKg; overallRaw.plannedLabHr+=l.plannedLabHr; overallRaw.actualLabHr+=l.actualLabHr; overallRaw.outputKg+=l.outputKg; overallRaw.defectKg+=l.defectKg; });
   const overallR = ratios(overallRaw);
   const overallQuality = overallRaw.outputKg>0 ? Math.max(0,Math.min(1,1-(overallRaw.defectKg/overallRaw.outputKg))) : 1;
   const overall = { ...overallRaw, avail:overallR.avail, perf:overallR.perf, quality:overallQuality, oee: lines.length>0 ? (overallR.avail??1)*(overallR.perf??1)*overallQuality : null };
@@ -2765,10 +2781,12 @@ function calcOEE(from, to){
   // Daily trend (respects line filter, combines all matching lines per day)
   const dailyAgg = {}, dailyQual = {};
   rows.forEach(r=>{
-    if(!dailyAgg[r.date]) dailyAgg[r.date] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0};
+    if(!dailyAgg[r.date]) dailyAgg[r.date] = {runHrMin:0,breakdownMin:0,plannedCS:0,actualCS:0,plannedKg:0,actualKg:0,plannedLabHr:0,actualLabHr:0};
     const d = dailyAgg[r.date];
     d.runHrMin += (r.run_time_hr||0)*60; d.breakdownMin += (r.breakdown_min||0);
     d.plannedCS += sf3(r.planned_out_put_cs); d.actualCS += sf3(r.actual_out_put_cs);
+    d.plannedKg += sf3(r.planned_out_put_kg); d.actualKg += sf3(r.actual_out_put_kg);
+    d.plannedLabHr += sf3(r.planned_labour_hr); d.actualLabHr += sf3(r.actual_labour_hr);
   });
   qRows.forEach(r=>{
     if(!dailyQual[r.date]) dailyQual[r.date] = {outputKg:0,defectKg:0};
@@ -2777,7 +2795,9 @@ function calcOEE(from, to){
   const trend = Object.keys(dailyAgg).sort().map(d=>{
     const g = dailyAgg[d];
     const avail = (g.runHrMin+g.breakdownMin)>0 ? g.runHrMin/(g.runHrMin+g.breakdownMin) : 1;
-    const perf  = g.plannedCS>0 ? g.actualCS/g.plannedCS : 0;
+    const actualRate  = g.actualLabHr>0  ? g.actualKg/g.actualLabHr   : 0;
+    const plannedRate = g.plannedLabHr>0 ? g.plannedKg/g.plannedLabHr : 0;
+    const perf  = plannedRate>0 ? actualRate/plannedRate : 0;
     const q = dailyQual[d];
     const quality = (q && q.outputKg>0) ? Math.max(0,Math.min(1,1-(q.defectKg/q.outputKg))) : 1;
     return { date:d, avail, perf, quality, oee: avail*perf*quality };
@@ -2810,7 +2830,7 @@ function renderOeeModal(){
   const pctStr = v => v==null ? '–' : (v*100).toFixed(1)+'%';
   $('oee-modal-stats').innerHTML = `
     <div class="maint-type-card"><div class="maint-type-label">Availability</div><div class="maint-type-val" style="color:var(--blue)">${pctStr(line.avail)}</div><div class="maint-type-sub">${line.runHrMin.toFixed(0)} min run · ${line.breakdownMin.toFixed(0)} min logged downtime</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Performance</div><div class="maint-type-val" style="color:var(--amber)">${pctStr(line.perf)}</div><div class="maint-type-sub">${Math.round(line.actualCS).toLocaleString()} of ${Math.round(line.plannedCS).toLocaleString()} CS</div></div>
+    <div class="maint-type-card"><div class="maint-type-label">Performance</div><div class="maint-type-val" style="color:var(--amber)">${pctStr(line.perf)}</div><div class="maint-type-sub">${line.actualLabHr>0?(line.actualKg/line.actualLabHr).toFixed(1):'–'} kg/hr actual vs ${line.plannedLabHr>0?(line.plannedKg/line.plannedLabHr).toFixed(1):'–'} kg/hr planned</div></div>
     <div class="maint-type-card"><div class="maint-type-label">Quality</div><div class="maint-type-val" style="color:var(--teal)">${pctStr(line.quality)}</div><div class="maint-type-sub">${line.outputKg>0?`${line.defectKg.toFixed(1)} kg defect of ${line.outputKg.toFixed(1)} kg`:'No Quality Reject entries this period'}</div></div>
     <div class="maint-type-card"><div class="maint-type-label">OEE</div><div class="maint-type-val" style="color:var(--purple)">${pctStr(line.oee)}</div><div class="maint-type-sub">Availability × Performance × Quality</div></div>`;
 
