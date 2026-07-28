@@ -697,11 +697,39 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 // BUILD VERSION — bump this (date + time) every time this file is re-uploaded to GitHub.
 // Displayed in the header so two people can compare screenshots and instantly see
 // whether they're on the same deployed version, or one is on a stale cached copy.
-const BUILD_VERSION = "2026-07-27 18:10 IST";
+const BUILD_VERSION = "2026-07-27 18:32 IST";
 document.addEventListener('DOMContentLoaded', function(){
   var b = document.querySelector('.bsub');
   if(b){ b.innerHTML += ' &nbsp;·&nbsp; <span style="color:var(--text3)">Build ' + BUILD_VERSION + '</span>'; }
 });
+
+// ── SELF-HEALING STALE-CACHE CHECK ──────────────────────────────────────────
+// GitHub Pages serves this file through a CDN (Fastly) that caches the HTML
+// itself for several minutes at the edge. Meta cache-control tags in <head>
+// only affect the browser's own cache — they cannot override the CDN's real
+// HTTP cache headers. So two users can load genuinely different cached copies
+// of this file. To fix that: on every load, re-fetch this same file with a
+// unique cache-busting query string (which forces a real cache MISS at every
+// layer), compare its BUILD_VERSION to the one baked into the page you're
+// looking at, and if they differ, force a fresh reload. Capped at 2 retries
+// per tab session so a broken deploy can't loop forever.
+(async function ensureLatestVersion(){
+  try{
+    if(location.protocol === 'file:') return; // skip when testing locally
+    var retries = parseInt(sessionStorage.getItem('shi_reload_count') || '0', 10);
+    if(retries >= 2) return;
+    var resp = await fetch(location.pathname + '?t=' + Date.now(), {cache:'no-store'});
+    if(!resp.ok) return;
+    var html = await resp.text();
+    var m = html.match(/const BUILD_VERSION = "([^"]+)"/);
+    if(m && m[1] !== BUILD_VERSION){
+      sessionStorage.setItem('shi_reload_count', String(retries + 1));
+      location.replace(location.pathname + '?v=' + Date.now());
+    } else {
+      sessionStorage.removeItem('shi_reload_count');
+    }
+  }catch(e){ /* silent — never block the dashboard if this check fails */ }
+})();
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const LM={'PRL':'Pan Room Line','BSL':'Budget Soap Line','DFL':'Dishwash Finishing Line','DPML':'Detergent Powder Mixing Line','DPPL':'Detergent Powder Packing Line','FSL':'Finishing Soap Line','ISL':'Incense Sticks Line','LBML':'Liquid Batch Mixing Line','LPSL':'Liquid Packing Sachet Line','TBCPL':'Toilet Bowl Cleaner Packing Line','AFPL':'Air Freshener Packing Line','GCPL':'Glass Cleaner Packing Line','BPL':'Bleaching Powder Line','CPL':'Cleaning Powder Line','BLPL':'Bleaching Liquid Packing Line','SBLPL':'Star Blue Liquid Packing Line','HWLPL':'Hand Wash Liquid Packing Line','DLPL':'Dishwash Liquid Packing Line','LLPL':'Laundry Liquid Packing Line','DPL':'Disinfectants Packing Line','FSBPL':'Fabric Softener Bottle Packing Line','PCL':'Price Coding Line','CRWL':'Chemical Room Weighing Line','FGL':'Factory General Line','PARL':'Promotion and Reworks Line','BPKL':'Blister Packing Line'};
