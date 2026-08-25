@@ -123,6 +123,12 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .badge.dn{background:var(--green-lt);color:var(--green);}
 .badge.neu{background:var(--blue-lt);color:var(--blue);}
 .badge.warn{background:var(--amber-lt);color:var(--amber);}
+.kmom{font-size:10px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.kmom b{color:var(--text2);font-weight:700;}
+.kmom-badge{display:inline-flex;align-items:center;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;}
+.kmom-badge.up{background:#fde8e6;color:var(--red);}
+.kmom-badge.dn{background:var(--green-lt);color:var(--green);}
+.kmom-badge.flat{background:var(--blue-lt);color:var(--blue);}
 
 /* CHARTS */
 .cgrid{display:grid;grid-template-columns:2fr 1fr;gap:15px;margin-bottom:18px;}
@@ -602,12 +608,12 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <div class="cc" style="margin-bottom:18px;">
     <div class="ch">
       <div>
-        <div class="ct" id="hr-chart-title">Labour Cost per Case (CS) by Product</div>
+        <div class="ct">Labour Cost per Case (CS) by Product</div>
         <div class="cs" id="hr-chart-sub">Select date range and connect to see product costs</div>
       </div>
       <div class="leg">
-        <div class="li"><div class="ld" style="background:#1a5fa8"></div><span id="hr-leg-actual">Actual Cost/CS</span></div>
-        <div class="li" id="hr-leg-std-wrap"><div class="ld" style="background:#e8a000;border:2px dashed #e8a000;background:transparent"></div><span id="hr-leg-std">Standard Cost/CS</span></div>
+        <div class="li"><div class="ld" style="background:#1a5fa8"></div>Actual Cost/CS</div>
+        <div class="li"><div class="ld" style="background:#e8a000;border:2px dashed #e8a000;background:transparent"></div>Standard Cost/CS</div>
       </div>
     </div>
     <canvas id="hrChart" style="max-height:280px;"></canvas>
@@ -1264,6 +1270,11 @@ function calcDailyCost(role, hours, isSundayOrPoya) {
 }
 
 let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodDataFull=[], prodSources={};
+// Raw, unfiltered CSV rows (full sheet, no date-range slicing) — captured in
+// connectAll() and used by computePeriodCostsForKPIs() to independently
+// recompute costs for the "last month" comparison, since engData/elecDaily/
+// allocData above are already narrowed to the currently-selected date range.
+let rawLabRows=[], rawEngRows=[], rawElecDRows=[];
 let hrLineManualOverride=false; // true once the user manually changes the Hourly Rates section's own line dropdown
 const PROMO_LINE = 'PARL'; // Promo/Rework line — repacks already-produced FG; excluded from kg, cost tracked separately
 
@@ -1639,6 +1650,11 @@ async function connectAll(){
     console.log('Ignoring stale response for requestId:', myRequestId, '(current:', connectRequestId, ')');
     return;
   }
+
+  // Stash raw, unfiltered rows (full sheet) for the "last month" comparison —
+  // engData/elecDaily/allocData below are narrowed to the selected range, so
+  // computing a different (previous-month) period needs the unfiltered source.
+  rawLabRows = labRows; rawEngRows = engRows; rawElecDRows = elecDRows;
 
   // Parse labour allocation CSV
   if(labRows.length > 0) {
@@ -2029,57 +2045,33 @@ function renderHourlyRates() {
   // Render line chart
   if(charts.hr) charts.hr.destroy();
   const showProducts = products.filter(p => p.actCostPerCS > 0).slice(0, 20);
-
-  // Unit-aware labels — must follow viewMode so title/legend/tooltip never
-  // mismatch the plotted data (e.g. showing "/CS" while plotting LKR/kg).
-  const unitSuffix   = viewMode==='perCS' ? '/CS' : viewMode==='perHr' ? '/Hr' : '/kg';
-  const unitNoun     = viewMode==='perCS' ? 'Case (CS)' : viewMode==='perHr' ? 'Hour' : 'Kg';
-  const actualLabel  = `Actual LKR${unitSuffix}`;
-  const stdLabel      = `Standard LKR${unitSuffix}`;
-
-  const titleEl = document.getElementById('hr-chart-title');
-  if(titleEl) titleEl.textContent = `Labour Cost per ${unitNoun} by Product`;
-  const legActualEl = document.getElementById('hr-leg-actual');
-  if(legActualEl) legActualEl.textContent = `Actual Cost${unitSuffix}`;
-  const legStdEl = document.getElementById('hr-leg-std');
-  if(legStdEl) legStdEl.textContent = `Standard Cost${unitSuffix}`;
-  // Standard cost is only computed on a per-CS basis (headcount × rate ÷ CS).
-  // There's no standard-per-kg or standard-per-hour figure, so hide that
-  // series entirely outside perCS view rather than plot a flat, meaningless 0-line.
-  const legStdWrapEl = document.getElementById('hr-leg-std-wrap');
-  if(legStdWrapEl) legStdWrapEl.style.display = viewMode==='perCS' ? '' : 'none';
-
   if(showProducts.length > 0) {
-    const datasets = [
-      {
-        label: actualLabel,
-        data: showProducts.map(p => viewMode==='perCS'?p.actCostPerCS:viewMode==='perHr'?p.costPerHr:p.actCostPerKg),
-        backgroundColor: showProducts.map(p =>
-          p.variance > 0 ? 'rgba(192,57,43,0.7)' : 'rgba(26,95,168,0.7)'
-        ),
-        borderRadius: 4,
-        order: 1,
-      }
-    ];
-    if(viewMode==='perCS') {
-      datasets.push({
-        label: stdLabel,
-        data: showProducts.map(p => p.stdCostPerCS),
-        type: 'line',
-        borderColor: '#e8a000',
-        borderDash: [6,4],
-        borderWidth: 2,
-        pointRadius: 3,
-        fill: false,
-        order: 0,
-      });
-    }
-
     charts.hr = new Chart(document.getElementById('hrChart').getContext('2d'), {
       type: 'bar',
       data: {
         labels: showProducts.map(p => p.prodName.length > 30 ? p.prodName.slice(0,28)+'…' : p.prodName),
-        datasets
+        datasets: [
+          {
+            label: viewMode==='perCS'?'Actual LKR/CS':viewMode==='perHr'?'Actual LKR/Hr':'Actual LKR/kg',
+            data: showProducts.map(p => viewMode==='perCS'?p.actCostPerCS:viewMode==='perHr'?p.costPerHr:p.actCostPerKg),
+            backgroundColor: showProducts.map(p =>
+              p.variance > 0 ? 'rgba(192,57,43,0.7)' : 'rgba(26,95,168,0.7)'
+            ),
+            borderRadius: 4,
+            order: 1,
+          },
+          {
+            label: 'Standard LKR/CS',
+            data: showProducts.map(p => viewMode==='perCS'?p.stdCostPerCS:0),
+            type: 'line',
+            borderColor: '#e8a000',
+            borderDash: [6,4],
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: false,
+            order: 0,
+          }
+        ]
       },
       options: {
         responsive: true,
@@ -2090,7 +2082,7 @@ function renderHourlyRates() {
             callbacks: {
               label: c => {
                 const p = showProducts[c.dataIndex];
-                if(c.datasetIndex === 0) return `Actual: LKR ${c.parsed.y}${unitSuffix} · ${p.actCS} CS · ${p.allocHrs}h allocated`;
+                if(c.datasetIndex === 0) return `Actual: LKR ${c.parsed.y}/CS · ${p.actCS} CS · ${p.allocHrs}h allocated`;
                 return `Standard: LKR ${c.parsed.y}/CS (${p.stdHC} people × ${EMPLOYMENT_RATES.blendedHr}/hr)`;
               }
             }
@@ -2231,6 +2223,144 @@ function calcCosts(from,to){
   };
 }
 
+// ── MONTH-OVER-MONTH COMPARISON ─────────────────────────────────────────────
+// Always resolves to the full prior calendar month relative to the selected
+// "Date To" (e.g. Aug 1–31 filter → compares to Jul 1–31), regardless of the
+// exact "Date From" chosen, so the reference point doesn't shift every time
+// the range is narrowed — matches HOM's "same period last month" ask.
+function getPrevMonthRange(toStr){
+  const d = toStr ? new Date(toStr+'T00:00:00') : new Date();
+  const y = d.getFullYear(), m = d.getMonth();
+  const pFrom = new Date(y, m-1, 1);
+  const pTo   = new Date(y, m, 0); // day 0 of this month = last day of prev month
+  const iso = dd => dd.toISOString().slice(0,10);
+  return { from: iso(pFrom), to: iso(pTo) };
+}
+
+// Recomputes the same cost aggregates as calcCosts()/renderLabour() but for
+// an arbitrary range (used for the previous-month reference), pulling from
+// the raw unfiltered CSV rows captured in connectAll() — NOT from
+// engData/elecDaily/allocData, which are already narrowed to whatever range
+// is currently selected in the date filters. Respects the Production Line
+// filter the same way getFilteredEng()/getFilteredElec()/getFilteredLabour() do.
+let _prevPeriodCache = { key:'', data:null };
+function computePeriodCostsForKPIs(from,to){
+  const lf = getLineFilter();
+  const key = from+'|'+to+'|'+lf+'|'+rawLabRows.length+'|'+rawEngRows.length+'|'+rawElecDRows.length+'|'+elecBill.length;
+  if(_prevPeriodCache.key===key) return _prevPeriodCache.data;
+
+  const nameFor = code => (LM[code]||code).toLowerCase();
+  const lineMatches = area => {
+    if(lf==='all') return true;
+    const a = String(area).toLowerCase(), name = nameFor(lf);
+    return a.includes(name) || a.includes(lf.toLowerCase());
+  };
+
+  // Maintenance
+  let maintCost=0, maintFactory=0, maintMachinery=0, maintPreventive=0, maintBreakdown=0;
+  if(rawEngRows.length>0){
+    filterByDate(rawEngRows,'date',from,to).forEach(r=>{
+      const area = r['line__area']||r['line_area']||r['line___area']||'';
+      if(!lineMatches(area)) return;
+      const amt = parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
+      maintCost += amt;
+      const ct=String(r['cost_type']||'').toLowerCase();
+      const st=String(r['subtype']||r['sub_type']||'').toLowerCase();
+      if(ct.includes('factory'))maintFactory+=amt;
+      if(ct.includes('machinery'))maintMachinery+=amt;
+      if(st.includes('prevent'))maintPreventive+=amt;
+      if(st.includes('break')||st.includes('correct'))maintBreakdown+=amt;
+    });
+  }
+
+  // Electricity — KWh (line-filtered) + bill cost matched by month overlap
+  let elecKwh=0;
+  if(rawElecDRows.length>0){
+    filterByDate(rawElecDRows,'date',from,to).forEach(r=>{
+      const area = r['factory_area']||r['area']||'';
+      if(!lineMatches(area)) return;
+      elecKwh += parseFloat(r['kwh_consumed']||0)||0;
+    });
+  }
+  const MONTH_MAP={'january':1,'february':2,'march':3,'april':4,'may':5,'june':6,
+    'july':7,'august':8,'september':9,'october':10,'november':11,'december':12};
+  let elecCost=0;
+  const fromDate=new Date(from), toDate=new Date(to);
+  if(elecBill.length>0){
+    elecBill.forEach(r=>{
+      const mName=String(r['month']||'').toLowerCase().trim();
+      const yr=parseInt(r['year'])||0;
+      const mNum=MONTH_MAP[mName]||0;
+      if(!mNum||!yr) return;
+      const billStart=new Date(yr,mNum-1,1), billEnd=new Date(yr,mNum,0);
+      if(billEnd>=fromDate && billStart<=toDate){
+        elecCost += parseFloat(String(r['total_bill_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+      }
+    });
+  }
+  if(elecCost===0 && elecKwh>0 && elecBill.length>0){
+    const lastBill=elecBill[elecBill.length-1];
+    const rate=parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+    if(rate>0) elecCost = elecKwh*rate;
+  }
+
+  // Labour — reparse raw rows for this range (mirrors connectAll's own
+  // allocData = parseLabourCSV(labRows, from, to), so the OT/DOT split for
+  // the comparison period is computed the exact same way as the live one).
+  let labourCostAll=0, promoCost=0, otBreakdown=null, filesFound=0;
+  if(rawLabRows.length>0){
+    const alloc = parseLabourCSV(rawLabRows, from, to);
+    filesFound = alloc.filesFound;
+    otBreakdown = alloc.otBreakdown;
+    if(lf==='all'){
+      labourCostAll = alloc.totalCost;
+    } else {
+      const name = nameFor(lf);
+      Object.entries(alloc.lineTotals||{}).forEach(([line,val])=>{
+        const l=String(line).toLowerCase();
+        if(l.includes(name)||name.includes(l)||l.includes(lf.toLowerCase())) labourCostAll += val.cost||0;
+      });
+    }
+    Object.entries(alloc.lineTotals||{}).forEach(([line,val])=>{
+      const l=String(line).toLowerCase();
+      const isPromo = l===PROMO_LINE.toLowerCase() || (l.includes('promo')&&l.includes('rework'));
+      if(!isPromo) return;
+      if(lf!=='all'){
+        const name=nameFor(lf);
+        if(!(l.includes(name)||name.includes(l)||l.includes(lf.toLowerCase()))) return;
+      }
+      promoCost += val.cost||0;
+    });
+  }
+  const labourCost = Math.max(0, labourCostAll - promoCost);
+
+  const result = {
+    labourCost, promoCost, labourCostAll, maintCost, maintFactory, maintMachinery, maintPreventive, maintBreakdown, elecCost, elecKwh,
+    totalCost: labourCostAll + maintCost + elecCost,
+    otBreakdown, filesFound,
+  };
+  _prevPeriodCache = { key, data: result };
+  return result;
+}
+
+// Compact "vs last month" line rendered inside a KPI/stream card. Shows the
+// prior period's absolute value plus a +/- % badge (red=up/worse for a cost
+// metric, green=down/better), so HOM can see at a glance how the current
+// period is pacing before it closes.
+function momLine(label, curVal, prevVal){
+  curVal = curVal||0; prevVal = prevVal||0;
+  if(curVal===0 && prevVal===0){
+    return `<div class="kmom">${label}: <b>–</b> <span class="kmom-badge flat">No data</span></div>`;
+  }
+  const diff = curVal - prevVal;
+  const pct  = prevVal>0 ? (diff/prevVal*100) : 100;
+  const flat = Math.abs(pct) < 0.5;
+  const cls  = flat ? 'flat' : (diff>0 ? 'up' : 'dn');
+  const arrow= flat ? '≈' : (diff>0 ? '▲' : '▼');
+  const sign = diff>0 ? '+' : '';
+  return `<div class="kmom">${label}: <b>${fmt(prevVal)}</b> <span class="kmom-badge ${cls}">${arrow} ${sign}${pct.toFixed(1)}%</span></div>`;
+}
+
 // ── RENDER UNIT COST SUMMARY ──────────────────────────────────────────────────
 // (unit-cost-card removed from layout; per-kg figures shown in KPI card badges)
 function renderUnitCost(c){ /* no-op */ }
@@ -2242,15 +2372,24 @@ function renderKPIs(rows,c){
   const eff=pp>0?(pa/pp*100).toFixed(1):0;
   const labourCostAll = c.labourCost + c.promoCost; // production + promo combined
   const flt = getFilteredLabour();
+
+  // Last-month reference (full prior calendar month vs the current "Date To")
+  const prevRange = getPrevMonthRange(($('f-to')||{}).value);
+  const cPrev = computePeriodCostsForKPIs(prevRange.from, prevRange.to);
+  const momLbl = `Last month (${prevRange.from} to ${prevRange.to})`;
+
   const kpis=[
-    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
-    {c:'blue',l:'Labour Cost',v:fmt(labourCostAll),s:flt&&flt.totalHours>0?`${flt.employees} employees · ${flt.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:labourCostAll>0?`Production: ${fmt(c.labourCost)} · Promo/Rework: ${fmt(c.promoCost)}`:'–',bt:'neu'},
-    {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
-    {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
+    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),curRaw:c.totalCost,prevRaw:cPrev.totalCost,s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
+    {c:'blue',l:'Labour Cost',v:fmt(labourCostAll),curRaw:labourCostAll,prevRaw:cPrev.labourCostAll,s:flt&&flt.totalHours>0?`${flt.employees} employees · ${flt.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:labourCostAll>0?`Production: ${fmt(c.labourCost)} · Promo/Rework: ${fmt(c.promoCost)}`:'–',bt:'neu'},
+    {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),curRaw:c.maintCost,prevRaw:cPrev.maintCost,s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
+    {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),curRaw:c.elecCost,prevRaw:cPrev.elecCost,s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
     {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu'},
   ];
-  const kpiHtml = kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
+  const kpiHtml = kpis.map(k=>{
+    const mom = (k.curRaw!==undefined) ? momLine(momLbl,k.curRaw,k.prevRaw) : '';
+    return `<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div>${mom}</div>`;
+  }).join('');
   // OEE card — placeholder here, content filled in by renderOEE() (which runs
   // after renderKPIs in renderAll and needs Production DB + Quality Rejects
   // data already loaded). Highest-OEE tier shown as the primary value; the
@@ -2431,11 +2570,21 @@ function renderLabour(c){
     // OT/DOT calculated per-employee-per-day (>9hrs/day = OT 1.5x; Sunday/Poya = DOT 2.0x for the whole day)
     const otb = allocData.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
 
+    // Last-month reference for each stream (same full-prior-calendar-month
+    // rule as the top KPI board — see getPrevMonthRange).
+    const prevRangeL = getPrevMonthRange(($('f-to')||{}).value);
+    const cPrevL = computePeriodCostsForKPIs(prevRangeL.from, prevRangeL.to);
+    const otbPrev = cPrevL.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
+    // Matches labTotal above (= allocData.totalCost), not the OT-tier sum,
+    // since that's the basis "Total Labour Cost" actually displays.
+    const prevLabTotal = cPrevL.labourCostAll;
+    const momLblL = `Last month (${prevRangeL.from} to ${prevRangeL.to})`;
+
     $('labour-kpis').innerHTML=`
-      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div></div>
-      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h</div></div>
-      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>`;
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div>${momLine(momLblL,otb.normalCost,otbPrev.normalCost)}</div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee</div>${momLine(momLblL,otb.otCost,otbPrev.otCost)}</div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h</div>${momLine(momLblL,otb.dotCost,otbPrev.dotCost)}</div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div>${momLine(momLblL,labTotal,prevLabTotal)}</div>`;
   } else {
     // No live data — show placeholder
     $('labour-kpis').innerHTML=`
@@ -2491,10 +2640,16 @@ function renderMaintenance(c){
     pmRatioStr=`${pr} : ${br}`;
   }
   const pmHealthy=_brk<=_pm;
+
+  // Last-month reference for the three type cards below
+  const prevRangeM = getPrevMonthRange(($('f-to')||{}).value);
+  const cPrevM = computePeriodCostsForKPIs(prevRangeM.from, prevRangeM.to);
+  const momLblM = `Last month (${prevRangeM.from} to ${prevRangeM.to})`;
+
   $('maint-type-cards').innerHTML=`
-    <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub" style="margin-top:4px;"><span style="font-size:11px;font-weight:700;color:${pmHealthy?'var(--teal)':'var(--red)'};">PM : BRK &nbsp;${pmRatioStr}</span></div><div class="maint-type-sub" style="margin-top:3px;">${pmHealthy?'✓ PM ratio healthy':'⚠ Breakdown > Preventive'}</div></div>`;
+    <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div>${momLine(momLblM,c.maintFactory,cPrevM.maintFactory)}</div>
+    <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div>${momLine(momLblM,c.maintMachinery,cPrevM.maintMachinery)}</div>
+    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub" style="margin-top:4px;"><span style="font-size:11px;font-weight:700;color:${pmHealthy?'var(--teal)':'var(--red)'};">PM : BRK &nbsp;${pmRatioStr}</span></div><div class="maint-type-sub" style="margin-top:3px;">${pmHealthy?'✓ PM ratio healthy':'⚠ Breakdown > Preventive'}</div>${momLine(momLblM,c.maintPreventive+c.maintBreakdown,cPrevM.maintPreventive+cPrevM.maintBreakdown)}</div>`;
 
   const filteredEngData = getFilteredEng();
 
