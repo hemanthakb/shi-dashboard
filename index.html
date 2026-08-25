@@ -1863,11 +1863,18 @@ function getProdActuals(from, to) {
 
   const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
 
-  // Batch lines excluded from volume (but included in cost)
-  // PARL = Promo/Rework line — repacks already-produced FG into promo packs,
-  // so its kg is not new production and must not double-count Total Kg Produced.
-  // Its labour cost is still tracked, but broken out separately (see calcCosts).
-  const BATCH_LINES = ['DPML','LBML','CRWL','PRL','FGL','PCL','AFPL','BPL','CPL','PARL'];
+  // Batch lines excluded from volume (but included in cost) — uses the same
+  // canonical BATCH_LINE_CODES set as every other section (Production DB row
+  // filter, OEE, Output Efficiency) so this can't drift out of sync again.
+  // FIX (Aug 2026): this used to be a separate hardcoded array that had
+  // wrongly picked up AFPL/BPL/CPL (Air Freshener, Bleaching Powder, Cleaning
+  // Powder — all real MANUAL packing lines, not batch/WIP or promo/rework),
+  // which silently zeroed their kg/CS out of Total kg Produced, Total CS and
+  // Output Efficiency while still counting their labour hours — understating
+  // total tonnage and overstating cost-per-kg. Confirmed with HOM: only
+  // DPML/LBML/CRWL/PRL/FGL/PCL (batch/WIP stage) and PARL (promo/rework,
+  // already counted once in FG qty) should be excluded from volume.
+  const BATCH_LINES = [...BATCH_LINE_CODES];
 
   const lineAgg = {}, dailyAgg = {}, productAgg = {};
   let totalKg = 0, totalCS = 0, totalRunHrs = 0, totalLabHrs = 0;
