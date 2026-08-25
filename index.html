@@ -2368,9 +2368,44 @@ function momLine(label, curVal, prevVal){
   return `<div class="kmom">${label}: <b>${fmt(prevVal)}</b> <span class="kmom-badge ${cls}">${arrow} ${sign}${pct.toFixed(1)}%</span></div>`;
 }
 
+// ── FG OUTPUT QTY (Packing/Finishing lines only) ────────────────────────────
+// Per HOM (Aug 2026): all lines recorded in the Production Database's "Manual
+// Line" sheet are direct Finished-Goods output — that sheet only ever
+// contains packing/finishing lines to begin with (batch/mixing-stage tonnage
+// lives in the separate Batch Production Master sheet and is tracked as WIP
+// in the WIP Inventory module, not here). PARL (Promotion/Rework) is still
+// excluded — its kg was already counted once when the original FG was first
+// produced, so including it again would double-count tonnage.
+// This is deliberately computed standalone from prodDataFull (the raw,
+// unfiltered Production DB rows) rather than reused from calcCosts()/
+// getProdActuals(), so it never falls back to the embedded historical
+// SD.daily_totals data the way the main Total kg Produced figure can — it's
+// meant to be a literal "what does the Production DB show" number.
+function computeFGOutputQty(from,to){
+  if(!prodDataFull || prodDataFull.length===0) return null;
+  const lf = getLineFilter();
+  let kg=0; const days=new Set();
+  prodDataFull.forEach(r=>{
+    if(!r.date || r.date<from || r.date>to) return;
+    if(BATCH_LINE_CODES.has(r.line)) return; // excludes PARL + any batch/WIP-stage codes
+    if(lf!=='all' && r.line!==lf) return;
+    const v = parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0;
+    kg += v;
+    days.add(r.date);
+  });
+  return { kg, days: days.size };
+}
+
 // ── RENDER UNIT COST SUMMARY ──────────────────────────────────────────────────
 // (unit-cost-card removed from layout; per-kg figures shown in KPI card badges)
 function renderUnitCost(c){ /* no-op */ }
+
+// Plain supplementary fact line inside a KPI card — visually matches momLine
+// (dashed divider) but without the variance badge, for a value that's just
+// informational rather than a period-over-period comparison.
+function infoLine(label, value){
+  return `<div class="kmom">${label}: <b>${value}</b></div>`;
+}
 
 // ── RENDER KPIs ───────────────────────────────────────────────────────────────
 function renderKPIs(rows,c){
@@ -2391,11 +2426,15 @@ function renderKPIs(rows,c){
     {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),curRaw:c.maintCost,prevRaw:cPrev.maintCost,s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
     {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),curRaw:c.elecCost,prevRaw:cPrev.elecCost,s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
-    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu'},
+    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu',extraHtml:(()=>{
+      const fg = computeFGOutputQty(($('f-from')||{}).value, ($('f-to')||{}).value);
+      return fg ? infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fg.kg).toLocaleString()+' kg') : '';
+    })()},
   ];
   const kpiHtml = kpis.map(k=>{
     const mom = (k.curRaw!==undefined) ? momLine(momLbl,k.curRaw,k.prevRaw) : '';
-    return `<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div>${mom}</div>`;
+    const extra = k.extraHtml || '';
+    return `<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div>${mom}${extra}</div>`;
   }).join('');
   // OEE card — placeholder here, content filled in by renderOEE() (which runs
   // after renderKPIs in renderAll and needs Production DB + Quality Rejects
