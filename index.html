@@ -2396,6 +2396,29 @@ function computeFGOutputQty(from,to){
   return { kg, days: days.size };
 }
 
+// ── BATCH MIXING QTY (Batch Production Master, period throughput) ──────────
+// Per HOM (Aug 2026): batch/mixing-stage tonnage (noodles, shaped WIP, powder
+// mixing etc. — recorded in the Batch Production Master sheet) is real
+// production that consumed labour hours, and belongs in "Total kg Produced"
+// alongside FG output — even though the same physical material is often
+// counted again downstream when it becomes packed FG. That's intentional:
+// this is a gross throughput figure (tonnage processed at every stage that
+// touched labour), not a net physical-output figure. It is a PERIOD total
+// (produced within from–to), unlike buildWIPBalances()'s running stock
+// balance, which is always "as of" a single date.
+function computeBatchMixingQty(from,to){
+  if(!batchRows || batchRows.length===0) return null;
+  const lf = getLineFilter();
+  let kg=0; const days=new Set();
+  batchRows.forEach(r=>{
+    if(!r.date || r.date<from || r.date>to) return;
+    if(lf!=='all' && r.line!==lf) return;
+    kg += r.weight||0;
+    days.add(r.date);
+  });
+  return { kg, days: days.size };
+}
+
 // ── RENDER UNIT COST SUMMARY ──────────────────────────────────────────────────
 // (unit-cost-card removed from layout; per-kg figures shown in KPI card badges)
 function renderUnitCost(c){ /* no-op */ }
@@ -2420,16 +2443,29 @@ function renderKPIs(rows,c){
   const cPrev = computePeriodCostsForKPIs(prevRange.from, prevRange.to);
   const momLbl = `Last month (${prevRange.from} to ${prevRange.to})`;
 
+  // Total kg Produced = batch/mixing-stage throughput + FG output — both
+  // count because labour was applied at each stage (per HOM, Aug 2026).
+  // FG Output Qty stays the smaller, packing/finishing-only sub-figure.
+  // NOTE: this combined figure is for THIS display card only — it does not
+  // feed cost-per-kg (c.totalPerKg / labPerKg / elecPerKg above), which stay
+  // on the existing FG-only basis so no cost metric shifts as a side effect.
+  const kgFrom = ($('f-from')||{}).value, kgTo = ($('f-to')||{}).value;
+  const fgOut   = computeFGOutputQty(kgFrom, kgTo);
+  const batchQty= computeBatchMixingQty(kgFrom, kgTo);
+  const fgKg    = fgOut ? fgOut.kg : 0;
+  const batchKg = batchQty ? batchQty.kg : 0;
+  const grandKg = fgKg + batchKg;
+
   const kpis=[
     {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),curRaw:c.totalCost,prevRaw:cPrev.totalCost,s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
     {c:'blue',l:'Labour Cost',v:fmt(labourCostAll),curRaw:labourCostAll,prevRaw:cPrev.labourCostAll,s:flt&&flt.totalHours>0?`${flt.employees} employees · ${flt.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:labourCostAll>0?`Production: ${fmt(c.labourCost)} · Promo/Rework: ${fmt(c.promoCost)}`:'–',bt:'neu'},
     {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),curRaw:c.maintCost,prevRaw:cPrev.maintCost,s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
     {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),curRaw:c.elecCost,prevRaw:cPrev.elecCost,s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
-    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu',extraHtml:(()=>{
-      const fg = computeFGOutputQty(($('f-from')||{}).value, ($('f-to')||{}).value);
-      return fg ? infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fg.kg).toLocaleString()+' kg') : '';
-    })()},
+    {c:'green',l:'Total kg Produced (Mixing + FG)',v:grandKg>0?Math.round(grandKg).toLocaleString()+' kg':'–',s:'Batch/mixing stage + packing/finishing output combined',b:grandKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu',extraHtml:grandKg>0?(
+      infoLine('Batch Mixing Qty (Batch Production Master)', Math.round(batchKg).toLocaleString()+' kg') +
+      infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fgKg).toLocaleString()+' kg')
+    ):''},
   ];
   const kpiHtml = kpis.map(k=>{
     const mom = (k.curRaw!==undefined) ? momLine(momLbl,k.curRaw,k.prevRaw) : '';
