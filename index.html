@@ -2376,6 +2376,20 @@ function momLine(label, curVal, prevVal){
 // in the WIP Inventory module, not here). PARL (Promotion/Rework) is still
 // excluded — its kg was already counted once when the original FG was first
 // produced, so including it again would double-count tonnage.
+//
+// FIX (Aug 2026): products that pass through more than one process stage on
+// the same line/day (e.g. Filling then Packing, or Counting then Packing)
+// get a separate Production DB row per stage, and — confirmed with HOM —
+// the kg logged at each stage for the same date+line+product is always
+// identical (the same physical goods re-checkpointed, not additional
+// output). Summing every row therefore double-counted those products. Now:
+// group by date+line+product, and if a "Packing" row exists for that group,
+// count ONLY the Packing row(s) — earlier-stage rows (Filling/Counting/
+// Wrapping/etc.) for that same group are dropped as checkpoints of the same
+// goods. If no Packing row exists for a group (e.g. DPPL/LPSL only ever log
+// "Wrapping", DFL only logs "Finishing"), keep whatever single stage is
+// there, since that's the only stage recorded for that product/process.
+//
 // This is deliberately computed standalone from prodDataFull (the raw,
 // unfiltered Production DB rows) rather than reused from calcCosts()/
 // getProdActuals(), so it never falls back to the embedded historical
@@ -2384,14 +2398,24 @@ function momLine(label, curVal, prevVal){
 function computeFGOutputQty(from,to){
   if(!prodDataFull || prodDataFull.length===0) return null;
   const lf = getLineFilter();
-  let kg=0; const days=new Set();
+  const groups = {};
   prodDataFull.forEach(r=>{
     if(!r.date || r.date<from || r.date>to) return;
     if(BATCH_LINE_CODES.has(r.line)) return; // excludes PARL + any batch/WIP-stage codes
     if(lf!=='all' && r.line!==lf) return;
-    const v = parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0;
-    kg += v;
-    days.add(r.date);
+    const key = r.date+'|'+r.line+'|'+String(r.product_sku||'').trim();
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  });
+  let kg=0; const days=new Set();
+  Object.values(groups).forEach(rowsInGroup=>{
+    const packingRows = rowsInGroup.filter(r=>String(r.stage||'').toLowerCase().includes('pack'));
+    const useRows = packingRows.length>0 ? packingRows : rowsInGroup;
+    useRows.forEach(r=>{
+      const v = parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0;
+      kg += v;
+      days.add(r.date);
+    });
   });
   return { kg, days: days.size };
 }
