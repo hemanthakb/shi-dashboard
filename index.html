@@ -593,7 +593,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
           <option value="perHr">View: Cost per Hour</option>
           <option value="perKg">View: Cost per kg</option>
         </select>
-        <div style="font-size:10px;color:var(--text3);">Allocated Hours × LKR 256.20</div>
+        <div style="font-size:10px;color:var(--text3);" title="Actual: each employee-day costed as normal hrs × LKR 380.14 + OT hrs × LKR 243.75 (+ Sun/Poya hrs × LKR 325.00). Standard: headcount × LKR 342.94/hr = 8 normal + 3 OT hrs ÷ 11.">Normal hrs × LKR 380.14 + OT hrs × LKR 243.75 · Std LKR 342.94/hr</div>
       </div>
     </div>
   </div>
@@ -1031,7 +1031,9 @@ function parseLabourCSV(rows, from, to, attendOT) {
     curRows.push({ line: lineCol, prod: prodCol, hrs: hrsCol });
   });
 
-  // Aggregate, applying backward-fill for blank lines within each block and date filter
+  // Pass 1: backward-fill blank lines within each block, apply the date filter,
+  // and total each employee's hours per day (needed to split normal vs OT).
+  const allocRows = []; // { date, employee, edKey, line, prod, hrs }
   blocks.forEach(block => {
     if(!block.date || block.date < from || block.date > to) return;
     if(!block.employee) return;
@@ -1053,32 +1055,62 @@ function parseLabourCSV(rows, from, to, attendOT) {
 
     block.rows.forEach(({line, prod, hrs}) => {
       if(!line || hrs <= 0) return;
-
-      totalHours += hrs;
-      totalCost  += hrs * EMPLOYMENT_RATES.blendedHr;
       employeeDayTotals[edKey].hours = parseFloat((employeeDayTotals[edKey].hours + hrs).toFixed(2));
-
-      if(!lineTotals[line]) lineTotals[line] = { hours:0, cost:0 };
-      lineTotals[line].hours = parseFloat((lineTotals[line].hours + hrs).toFixed(2));
-      lineTotals[line].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
-      if(!lineEmployees[line]) lineEmployees[line] = new Set();
-      lineEmployees[line].add(block.employee);
-      if(!lineDailyTotals[line]) lineDailyTotals[line] = {};
-      if(!lineDailyTotals[line][block.date]) lineDailyTotals[line][block.date] = {hours:0,cost:0};
-      lineDailyTotals[line][block.date].hours = parseFloat((lineDailyTotals[line][block.date].hours + hrs).toFixed(2));
-      lineDailyTotals[line][block.date].cost += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
-
-      const key = `${line}|${prod}`;
-      if(!productTotals[key]) productTotals[key] = { line, product:prod, hours:0, employees:new Set(), cost:0 };
-      productTotals[key].hours = parseFloat((productTotals[key].hours + hrs).toFixed(2));
-      productTotals[key].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
-      productTotals[key].employees.add(block.employee);
-
-      if(!dailyTotals[block.date]) dailyTotals[block.date] = { hours:0, cost:0 };
-      dailyTotals[block.date].hours = parseFloat((dailyTotals[block.date].hours + hrs).toFixed(2));
-      dailyTotals[block.date].cost  += Math.round(hrs * EMPLOYMENT_RATES.blendedHr);
+      allocRows.push({ date: block.date, employee: block.employee, edKey, line, prod, hrs });
     });
   });
+
+  // Labour cost per employee-day = normal hrs × normal rate + OT hrs × OT rate
+  // + DOT hrs × DOT rate (never one blended rate). Each allocated row then
+  // carries that employee-day's cost pro rata to its hours, so line / product /
+  // daily totals add up exactly to the normal + OT + DOT cost.
+  // Where attendance-verified hours exist for a date (OT_ATTENDANCE_CUTOVER+),
+  // that date's actual normal/OT/DOT mix sets the cost per hour instead.
+  const attendByDate = (attendOT && attendOT.used && attendOT.byDate) || {};
+  const attendRateForDate = date => {
+    const a = attendByDate[date];
+    if(!a || date < OT_ATTENDANCE_CUTOVER) return null;
+    const hrs = a.normal + a.ot + a.dot;
+    return hrs > 0 ? a.cost / hrs : null;
+  };
+  const edRate = {};
+  Object.entries(employeeDayTotals).forEach(([k, ed]) => {
+    const ar = attendRateForDate(ed.date);
+    edRate[k] = ar != null ? ar : (ed.hours > 0 ? costOfSplit(splitDayHours(ed.date, ed.hours)) / ed.hours : 0);
+  });
+
+  // Pass 2: aggregate hours and cost.
+  allocRows.forEach(({date, employee, edKey, line, prod, hrs}) => {
+    const cost = hrs * edRate[edKey];
+
+    totalHours += hrs;
+    totalCost  += cost;
+
+    if(!lineTotals[line]) lineTotals[line] = { hours:0, cost:0 };
+    lineTotals[line].hours = parseFloat((lineTotals[line].hours + hrs).toFixed(2));
+    lineTotals[line].cost  += cost;
+    if(!lineEmployees[line]) lineEmployees[line] = new Set();
+    lineEmployees[line].add(employee);
+    if(!lineDailyTotals[line]) lineDailyTotals[line] = {};
+    if(!lineDailyTotals[line][date]) lineDailyTotals[line][date] = {hours:0,cost:0};
+    lineDailyTotals[line][date].hours = parseFloat((lineDailyTotals[line][date].hours + hrs).toFixed(2));
+    lineDailyTotals[line][date].cost += cost;
+
+    const key = `${line}|${prod}`;
+    if(!productTotals[key]) productTotals[key] = { line, product:prod, hours:0, employees:new Set(), cost:0 };
+    productTotals[key].hours = parseFloat((productTotals[key].hours + hrs).toFixed(2));
+    productTotals[key].cost  += cost;
+    productTotals[key].employees.add(employee);
+
+    if(!dailyTotals[date]) dailyTotals[date] = { hours:0, cost:0 };
+    dailyTotals[date].hours = parseFloat((dailyTotals[date].hours + hrs).toFixed(2));
+    dailyTotals[date].cost  += cost;
+  });
+  // Round once at the end (rounding every row drifted the totals).
+  Object.values(lineTotals).forEach(v => { v.cost = Math.round(v.cost); });
+  Object.values(lineDailyTotals).forEach(d => Object.values(d).forEach(v => { v.cost = Math.round(v.cost); }));
+  Object.values(productTotals).forEach(v => { v.cost = Math.round(v.cost); });
+  Object.values(dailyTotals).forEach(v => { v.cost = Math.round(v.cost); });
 
   const productTotalsClean = {};
   Object.entries(productTotals).forEach(([key, val]) => {
@@ -1092,57 +1124,26 @@ function parseLabourCSV(rows, from, to, attendOT) {
   });
 
   // ── OT CALCULATION ───────────────────────────────────────────────────────
-  // Rule (confirmed with user): per employee, per day, hours above 9 on a
-  // normal day are OT at 1.5x. On a Sunday or Poya day, the ENTIRE day's
-  // hours are at 2.0x (DOT) instead of the normal 1.0x/1.5x split.
-  // Saturday spillover rule (confirmed with user): a Saturday shift logged
-  // as 18+ hrs has run past midnight into Sunday, so hours beyond 18 are
-  // actually Sunday hours and billed at 2.0x DOT; the first 18 hrs still
-  // follow the normal 9hr-normal/9hr-OT split. E.g. 24 hrs on a Saturday =
-  // 9 normal + 9 OT + 6 DOT.
-  // This requires per-employee-per-day totals (employeeDayTotals), not just
-  // an aggregate hours-vs-capacity estimate.
-  const blendedHr = EMPLOYMENT_RATES.blendedHr;
+  // Per employee, per day (splitDayHours): first 8 hrs normal, hours above 8
+  // are OT; Sunday/Poya hours are all DOT; a Saturday shift of 18+ hrs has run
+  // into Sunday, so hours beyond 18 are DOT. Each part is costed at its own
+  // rate (EMPLOYMENT_RATES.normalHr / otHr / dotHr) — never blended.
   let normalHours = 0, otHours = 0, dotHours = 0;
   let normalCost  = 0, otCost  = 0, dotCost  = 0;
+  const R = EMPLOYMENT_RATES;
 
   const attendCovers = !!(attendOT && attendOT.used);
   Object.values(employeeDayTotals).forEach(({date, hours}) => {
     if(hours <= 0) return;
-    // From OT_ATTENDANCE_CUTOVER onward, real attendance data supplies the
-    // normal/OT/DOT split for these dates instead (merged in below) — skip
+    // Dates with attendance-verified hours (OT_ATTENDANCE_CUTOVER+) take their
+    // normal/OT/DOT split from the tracker instead (merged in below) — skip
     // here so the same hours aren't split twice by two different methods.
-    if(attendCovers && date >= OT_ATTENDANCE_CUTOVER) return;
-    const d = new Date(date + 'T00:00:00');
-    const isSaturday = d.getDay() === 6;
-    if(isSundayOrPoya(date)) {
-      dotHours += hours;
-      dotCost  += hours * blendedHr * 2.0;
-    } else if(isSaturday && hours >= 18) {
-      // Saturday shift running 18+ hrs has spilled past midnight into Sunday —
-      // hours beyond 18 actually happened on Sunday (a DOT day), so they're
-      // billed at 2.0x. The first 18 hrs still follow the normal 9hr-normal /
-      // 9hr-OT split (confirmed with user).
-      const normalPart = 9;
-      const otPart      = 9;
-      const dotPart     = hours - 18;
-      normalHours += normalPart;
-      otHours     += otPart;
-      dotHours    += dotPart;
-      normalCost  += normalPart * blendedHr;
-      otCost      += otPart * blendedHr * 1.5;
-      dotCost     += dotPart * blendedHr * 2.0;
-    } else if(hours > 9) {
-      const normalPart = 9;
-      const otPart      = hours - 9;
-      normalHours += normalPart;
-      otHours     += otPart;
-      normalCost  += normalPart * blendedHr;
-      otCost      += otPart * blendedHr * 1.5;
-    } else {
-      normalHours += hours;
-      normalCost  += hours * blendedHr;
-    }
+    if(attendCovers && date >= OT_ATTENDANCE_CUTOVER && attendOT.byDate[date]) return;
+    const sp = splitDayHours(date, hours);
+    normalHours += sp.normal; otHours += sp.ot; dotHours += sp.dot;
+    normalCost  += sp.normal * R.normalHr;
+    otCost      += sp.ot * R.otHr;
+    dotCost     += sp.dot * R.dotHr;
   });
 
   // Merge in attendance-verified OT/DOT for OT_ATTENDANCE_CUTOVER+ dates —
@@ -1179,7 +1180,9 @@ function parseLabourCSV(rows, from, to, attendOT) {
       attendanceVerified: attendCovers,
     },
     rates: {
-      blendedHr: EMPLOYMENT_RATES.blendedHr,
+      normalHr: EMPLOYMENT_RATES.normalHr,
+      otHr:     EMPLOYMENT_RATES.otHr,
+      dotHr:    EMPLOYMENT_RATES.dotHr,
     },
   };
 }
@@ -1199,7 +1202,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
 // Allocation's separately-measured hours for the same date.
 function parseAttendanceOT(dailyRows, histRows, from, to) {
   const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
-  const hr = EMPLOYMENT_RATES.blendedHr;
+  const R = EMPLOYMENT_RATES;
   const floor = from > OT_ATTENDANCE_CUTOVER ? from : OT_ATTENDANCE_CUTOVER;
 
   let normalHours = 0, otHours = 0, dotHours = 0;
@@ -1220,11 +1223,12 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
     const normal = Math.max(0, total - ot - dot);
 
     normalHours += normal; otHours += ot; dotHours += dot;
-    normalCost  += normal * hr; otCost += ot * hr * 1.5; dotCost += dot * hr * 2.0;
+    const rowCost = normal * R.normalHr + ot * R.otHr + dot * R.dotHr;
+    normalCost  += normal * R.normalHr; otCost += ot * R.otHr; dotCost += dot * R.dotHr;
     rowsUsed++;
 
-    if(!byDate[nd]) byDate[nd] = { normal:0, ot:0, dot:0 };
-    byDate[nd].normal += normal; byDate[nd].ot += ot; byDate[nd].dot += dot;
+    if(!byDate[nd]) byDate[nd] = { normal:0, ot:0, dot:0, cost:0 };
+    byDate[nd].normal += normal; byDate[nd].ot += ot; byDate[nd].dot += dot; byDate[nd].cost += rowCost;
   });
 
   return {
@@ -1328,21 +1332,59 @@ function isSundayOrPoya(dateStr) {
   return isSunday || isPoya;
 }
 
-// ── EMPLOYMENT COST RATES (confirmed from Production DB sources sheet) ────────
-const EMPLOYMENT_RATES = {
-  helper:   { fixedDaily:2520.00, fixedHr:315.00, otHr:225.00, dotHr:300.00, blended:239.375 },
-  operator: { fixedDaily:2850.00, fixedHr:356.25, otHr:262.50, dotHr:350.00, blended:273.021 },
-  blendedHr:  256.20,
-  blendedDay: 3074.375,
-};
+// ── EMPLOYMENT COST RATES (revised Sep 2026, confirmed by Hemantha) ──────────
+// Normal and OT hours are costed SEPARATELY — never blended into one rate.
+//   Normal hour = monthly package excl. OT ÷ 180 normal hrs (45 hrs/wk × 4 wks)
+//   OT hour     = Basic ÷ 200 × 1.5      DOT hour = Basic ÷ 200 × 2.0
+//   Standard day = 8 normal + 3 OT working hrs (+ 1 hr unpaid break)
+// Monthly package (LKR): Basic, Hard Allowance, Production Allowance,
+// Food 7,800, Boarding 5,000, EPF/ETF, Attendance Bonus 6,000 (OT excluded).
+// Employees aren't tagged helper/operator in the ERP export, so costing uses
+// the simple average of the two roles (same basis as before).
+const EMPLOYMENT_RATES = (() => {
+  const role = (basic, hardAllow, prodAllow, epfEtf) => {
+    const monthlyExOT = basic + hardAllow + prodAllow + 7800 + 5000 + epfEtf + 6000;
+    return { basic, monthlyExOT, normalHr: monthlyExOT / 180, otHr: basic / 200 * 1.5, dotHr: basic / 200 * 2.0 };
+  };
+  const helper   = role(30000, 1000, 10000, 4500); // 64,300/month → 357.22 / 225.00 / 300.00
+  const operator = role(35000, 1000, 12500, 5250); // 72,550/month → 403.06 / 262.50 / 350.00
+  const avg = k => (helper[k] + operator[k]) / 2;
+  const normalHr = avg('normalHr'), otHr = avg('otHr'), dotHr = avg('dotHr'); // 380.14 / 243.75 / 325.00
+  const NORMAL_DAY_HRS = 8, STD_OT_HRS = 3;
+  const stdDayCost = normalHr * NORMAL_DAY_HRS + otHr * STD_OT_HRS;          // 3,772.36 per person
+  return {
+    helper, operator, normalHr, otHr, dotHr,
+    NORMAL_DAY_HRS, STD_OT_HRS, stdDayCost,
+    // Standard-day cost per working hour (3,772.36 ÷ 11 = 342.94). Used ONLY
+    // where hours can't be split into normal/OT — product standards and the
+    // fallback when Labour Allocation isn't loaded.
+    stdDayHr: stdDayCost / (NORMAL_DAY_HRS + STD_OT_HRS),
+  };
+})();
 
-// ── HELPER: Calculate employee daily cost based on actual hours ───────────────
-function calcDailyCost(role, hours, isSundayOrPoya) {
+// ── SPLIT ONE EMPLOYEE-DAY INTO NORMAL / OT / DOT HOURS ───────────────────────
+// Sunday/Poya: all hours DOT. Other days: first 8 hrs normal, rest OT.
+// Saturday 18+ hrs has run past midnight into Sunday, so hours beyond 18 are DOT
+// (8 normal + 10 OT + remainder DOT).
+function splitDayHours(date, hours) {
+  const R = EMPLOYMENT_RATES, N = R.NORMAL_DAY_HRS;
+  if(hours <= 0) return { normal:0, ot:0, dot:0 };
+  if(isSundayOrPoya(date)) return { normal:0, ot:0, dot:hours };
+  const isSaturday = new Date(date + 'T00:00:00').getDay() === 6;
+  if(isSaturday && hours >= 18) return { normal:N, ot:18 - N, dot:hours - 18 };
+  if(hours > N) return { normal:N, ot:hours - N, dot:0 };
+  return { normal:hours, ot:0, dot:0 };
+}
+function costOfSplit(sp) {
+  const R = EMPLOYMENT_RATES;
+  return sp.normal * R.normalHr + sp.ot * R.otHr + sp.dot * R.dotHr;
+}
+
+// ── HELPER: Calculate one employee's cost for one day ─────────────────────────
+function calcDailyCost(role, hours, date) {
   const r = EMPLOYMENT_RATES[role] || EMPLOYMENT_RATES.helper;
-  if(isSundayOrPoya) return r.fixedDaily + hours * r.dotHr;
-  if(hours <= 8)     return r.fixedDaily;
-  if(hours <= 11)    return r.fixedDaily + (hours - 8) * r.otHr;
-  return r.fixedDaily + 3 * r.otHr + (hours - 11) * r.otHr;
+  const sp = splitDayHours(date, hours);
+  return sp.normal * r.normalHr + sp.ot * r.otHr + sp.dot * r.dotHr;
 }
 
 let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodDataFull=[], prodSources={};
@@ -1905,23 +1947,9 @@ async function connectAll(){
 
 // ── PARSE PRODUCTION SOURCES SHEET ───────────────────────────────────────────
 function parseProdSources(rows) {
-  // Extract employment rates
+  // Labour rates are defined in EMPLOYMENT_RATES (normal / OT / DOT costed
+  // separately), not read from this sheet — only product standards are.
   prodSources = { rates: {}, standards: {} };
-  rows.forEach(r => {
-    const label = String(r[''] || r[Object.keys(r)[0]] || '').trim().toLowerCase();
-    const val1  = Object.values(r)[1];
-    const val2  = Object.values(r)[3];
-    if(label.includes('hr cost') || label.includes('hr_cost')) {
-      prodSources.rates.helperHr   = parseFloat(val1) || 239.375;
-      prodSources.rates.operatorHr = parseFloat(val2) || 273.021;
-    }
-    if(label.includes('avg labor cost hr') || label.includes('avg_labor_cost_hr')) {
-      prodSources.rates.blendedHr = parseFloat(val1) || 256.20;
-    }
-  });
-  if(!prodSources.rates.blendedHr) prodSources.rates.blendedHr = EMPLOYMENT_RATES.blendedHr;
-  if(!prodSources.rates.helperHr)  prodSources.rates.helperHr  = EMPLOYMENT_RATES.helper.blended;
-  if(!prodSources.rates.operatorHr)prodSources.rates.operatorHr= EMPLOYMENT_RATES.operator.blended;
 
   // Also build product standards lookup
   buildProdStandards(rows);
@@ -1990,7 +2018,9 @@ function getProdActuals(from, to) {
     }
   });
 
-  const blendedHr = (prodSources.rates && prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
+  // Run time can't be split into normal/OT here, so the fallback uses the
+  // standard-day rate (8 normal + 3 OT hrs ÷ 11).
+  const stdDayHr = EMPLOYMENT_RATES.stdDayHr;
 
   const promoRunHrs = (lineAgg[PROMO_LINE] && lineAgg[PROMO_LINE].runHrs) || 0;
   const promoKg     = (lineAgg[PROMO_LINE] && lineAgg[PROMO_LINE].actKg)  || 0;
@@ -1998,10 +2028,10 @@ function getProdActuals(from, to) {
   return {
     lineAgg, dailyAgg, productAgg,
     totalKg, totalCS, totalRunHrs, totalLabHrs,
-    blendedHr, promoRunHrs, promoKg,
-    labourCostTotal: totalRunHrs * blendedHr,
-    labPerKg:  totalKg > 0 ? (totalRunHrs * blendedHr) / totalKg : 0,
-    labPerCS:  totalCS > 0 ? (totalRunHrs * blendedHr) / totalCS : 0,
+    stdDayHr, promoRunHrs, promoKg,
+    labourCostTotal: totalRunHrs * stdDayHr,
+    labPerKg:  totalKg > 0 ? (totalRunHrs * stdDayHr) / totalKg : 0,
+    labPerCS:  totalCS > 0 ? (totalRunHrs * stdDayHr) / totalCS : 0,
     effPct:    totalRunHrs > 0 ? (totalRunHrs / totalLabHrs * 100) : 0,
   };
 }
@@ -2011,7 +2041,7 @@ function renderHourlyRates() {
   if(!allocData || allocData.filesFound === 0) return;
 
   const pt        = allocData.productTotals || {};
-  const blendedHr = EMPLOYMENT_RATES.blendedHr;
+  const stdDayHr  = EMPLOYMENT_RATES.stdDayHr; // standard 8+3 day ÷ 11 hrs — for Standard LKR/CS only
   const lineSelectEarly = document.getElementById('hr-line-filter');
 
   // Populate this section's own line options once (ERP descriptive names)
@@ -2069,13 +2099,14 @@ function renderHourlyRates() {
     if(lineFilter !== 'all' && !lineName.toLowerCase().includes(lineFilter.toLowerCase())) return;
 
     const actuals  = prodActuals[prodName] || { runHrs:0, actCS:0, actKg:0 };
-    const labCost  = Math.round(alloc.hours * blendedHr);
+    // Actual cost = that product's share of each employee-day's normal + OT + DOT cost
+    const labCost  = Math.round(alloc.cost || 0);
 
     // Standard from sources sheet
     const std      = PROD_STANDARDS[prodName] || {};
     const stdCShr  = std.csPerHr || 0;
     const stdHC    = std.headcount || 0;
-    const stdCostPerCS = stdCShr > 0 ? Math.round((stdHC * blendedHr) / stdCShr * 100) / 100 : 0;
+    const stdCostPerCS = stdCShr > 0 ? Math.round((stdHC * stdDayHr) / stdCShr * 100) / 100 : 0;
 
     // Actual cost per CS using total allocated hours
     const actCostPerCS = actuals.actCS > 0 ? Math.round(labCost / actuals.actCS * 100) / 100 : 0;
@@ -2153,7 +2184,7 @@ function renderHourlyRates() {
               label: c => {
                 const p = showProducts[c.dataIndex];
                 if(c.datasetIndex === 0) return `Actual: LKR ${c.parsed.y}/CS · ${p.actCS} CS · ${p.allocHrs}h allocated`;
-                return `Standard: LKR ${c.parsed.y}/CS (${p.stdHC} people × ${EMPLOYMENT_RATES.blendedHr}/hr)`;
+                return `Standard: LKR ${c.parsed.y}/CS (${p.stdHC} people × LKR ${EMPLOYMENT_RATES.stdDayHr.toFixed(2)}/hr standard day)`;
               }
             }
           }
@@ -2215,17 +2246,17 @@ function calcCosts(from,to){
   // totals (parseLabourCSV aggregates across all lines regardless of filter).
   const filteredAlloc = getFilteredLabour();
   const labourHrs  = prod ? prod.totalRunHrs : (filteredAlloc&&filteredAlloc.filesFound>0 ? filteredAlloc.totalHours : 0);
-  const blendedHr  = (prodSources.rates&&prodSources.rates.blendedHr) || EMPLOYMENT_RATES.blendedHr;
-  const labourCostAll = filteredAlloc&&filteredAlloc.filesFound>0 ? filteredAlloc.totalCost : (labourHrs * blendedHr);
+  const stdDayHr   = EMPLOYMENT_RATES.stdDayHr; // fallback only — allocation cost is normal + OT + DOT
+  const labourCostAll = filteredAlloc&&filteredAlloc.filesFound>0 ? filteredAlloc.totalCost : (labourHrs * stdDayHr);
 
   // Promo / rework (PARL line) — labour cost is real and stays in the grand
   // total, but it's pulled out of "Labour Cost" / per-kg metrics because the
   // kg it touches was already counted when the FG was first produced.
   // Prefer the ERP Labour Allocation line total (actual cost); fall back to
-  // Production DB run-time hours × blended rate if allocation data isn't loaded.
+  // Production DB run-time hours × standard-day rate if allocation data isn't loaded.
   const promoLineAlloc = getPromoLineTotal();
   const promoHrs  = promoLineAlloc ? (promoLineAlloc.hours||0) : (prod ? (prod.promoRunHrs||0) : 0);
-  const promoCost = promoLineAlloc ? (promoLineAlloc.cost||0)  : promoHrs * blendedHr;
+  const promoCost = promoLineAlloc ? (promoLineAlloc.cost||0)  : promoHrs * stdDayHr;
 
   const labourCost = Math.max(0, labourCostAll - promoCost);
 
@@ -2478,36 +2509,36 @@ function renderMix(c){
 // ── RENDER LABOUR SECTION ─────────────────────────────────────────────────────
 function renderLabour(c){
   // Labour KPI stream cards — use live allocation data if available
-  const hr = EMPLOYMENT_RATES.blendedHr;
-  const otHr  = EMPLOYMENT_RATES.helper.otHr;
-  const dotHr = EMPLOYMENT_RATES.helper.dotHr;
+  const R = EMPLOYMENT_RATES;
+  const lkr = v => 'LKR ' + v.toFixed(2);
 
   if(allocData && allocData.filesFound > 0) {
     // Live data from ERP allocation
     const totalHrs = allocData.totalHours;
     const days     = allocData.filesFound;
     const emps     = allocData.employees;
-    const labTotal = allocData.totalCost || (totalHrs * hr);
+    const labTotal = allocData.totalCost || (totalHrs * R.stdDayHr);
     const src = `${days} day(s) · ${emps} employees · ERP`;
 
-    // OT/DOT: assumption-based split (>9hrs/day = OT 1.5x; Sunday/Poya = DOT
-    // 2.0x) before OT_ATTENDANCE_CUTOVER; real attendance-verified Normal/
-    // Double OT hours (Labor Attendance Tracker) from that date onward.
+    // OT/DOT: assumption-based split (>8hrs/day = OT; Sunday/Poya = DOT)
+    // before OT_ATTENDANCE_CUTOVER; real attendance-verified Normal/Double OT
+    // hours (Labor Attendance Tracker) from that date onward. Each part is
+    // costed at its own rate (normal / OT / DOT), never blended.
     const otb = allocData.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
     const otSrcNote = otb.attendanceVerified
       ? ` · attendance-verified from ${OT_ATTENDANCE_CUTOVER}`
       : '';
 
     $('labour-kpis').innerHTML=`
-      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs · Rate 1.0× · ${src}</div></div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 9hrs/day per employee${otSrcNote}</div></div>
-      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT (2.0×) — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h${otSrcNote}</div></div>
-      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · LKR ${hr}/hr blended</div></div>`;
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs × ${lkr(R.normalHr)}/hr · ${src}</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 8hrs/day × ${lkr(R.otHr)}/hr${otSrcNote}</div></div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h × ${lkr(R.dotHr)}/hr${otSrcNote}</div></div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · normal + OT + DOT costed separately</div></div>`;
   } else {
     // No live data — show placeholder
     $('labour-kpis').innerHTML=`
       <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost (1.5×)</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--text3)">–</div><div class="ksub">Connect Labour Allocation</div></div>`;
   }
 
@@ -2520,7 +2551,7 @@ function renderLabour(c){
   const from=$('f-from').value,to=$('f-to').value;
   const sub=fltLab&&fltLab.filesFound>0?`${from} to ${to} · ${fltLab.filesFound} day(s) · ${fltLab.employees} employees · ${fltLab.totalHours.toFixed(1)} hrs · LKR ${Math.round(fltLab.totalCost||0).toLocaleString()}`:'No Labour Allocation data — connect ERP';
   const lines=Object.keys(a).sort((x,y)=>a[y]-a[x]);
-  const costs=lines.map(l=>Math.round(a[l]*SD.avg_blended));
+  const costs=lines.map(l=>{const v=rawA[l];return Math.round(typeof v==='object'&&v.cost!=null?v.cost:a[l]*R.stdDayHr);});
   const subEl=$('alloc-sub');if(subEl)subEl.textContent=sub;
   const badge=$('alloc-live-badge');if(badge)badge.style.display=allocData?'':'none';
   charts.alloc=new Chart($('allocChart').getContext('2d'),{type:'bar',data:{labels:lines,datasets:[{label:'Hours',data:lines.map(l=>a[l]),backgroundColor:'rgba(26,95,168,.25)',borderColor:'#1a5fa8',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(2)}h · Est. LKR ${costs[c.dataIndex].toLocaleString()}`}}},scales:{x:{grid:{display:false},ticks:{font:{size:9},color:'#4a5068',maxRotation:35}},y:{grid:{color:'#eef0f4'},ticks:{font:{size:9},color:'#8b92a5',callback:v=>v+'h'}}}}});
@@ -2538,10 +2569,10 @@ function renderLabour(c){
     const lt2=fltLab.lineTotals||{};
     const lines2=Object.keys(lt2).sort((a,b)=>getH(lt2[b])-getH(lt2[a]));
     const tH=lines2.reduce((s,l)=>s+getH(lt2[l]),0);
-    const tC=fltLab.totalCost||Math.round(tH*SD.avg_blended);
+    const tC=fltLab.totalCost||Math.round(tH*R.stdDayHr);
     const dl=fltLab.filesFound===1?'1 day':`${fltLab.filesFound} days`;
     const subEl2=$('alloc-table-sub');if(subEl2)subEl2.textContent=`${from} to ${to} · ${dl} · ${fltLab.employees} employees · ${tH.toFixed(2)} hrs`;
-    $('live-alloc-tbody').innerHTML=lines2.map(line=>{const h=getH(lt2[line]),cost=Math.round(h*SD.avg_blended),p=tH>0?(h/tH*100).toFixed(1):0;return`<tr><td style="text-align:left;font-weight:600;color:var(--blue)">${line}</td><td style="text-align:right;font-weight:700">${h.toFixed(2)}</td><td style="text-align:right">${p}%</td><td style="text-align:right;font-weight:700;color:var(--green)">${fmtF(cost)}</td></tr>`;}).join('');
+    $('live-alloc-tbody').innerHTML=lines2.map(line=>{const h=getH(lt2[line]),cost=Math.round(typeof lt2[line]==='object'&&lt2[line].cost!=null?lt2[line].cost:h*R.stdDayHr),p=tH>0?(h/tH*100).toFixed(1):0;return`<tr><td style="text-align:left;font-weight:600;color:var(--blue)">${line}</td><td style="text-align:right;font-weight:700">${h.toFixed(2)}</td><td style="text-align:right">${p}%</td><td style="text-align:right;font-weight:700;color:var(--green)">${fmtF(cost)}</td></tr>`;}).join('');
     $('live-alloc-total').innerHTML=`<tr style="font-weight:700;background:var(--surface2);border-top:2px solid var(--border2)"><td style="text-align:left">TOTAL — ${dl}</td><td style="text-align:right">${tH.toFixed(2)}</td><td style="text-align:right">100%</td><td style="text-align:right;color:var(--blue)">${fmtF(tC)}</td></tr>`;
   }else if(sec)sec.style.display='none';
 }
