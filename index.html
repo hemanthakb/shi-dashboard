@@ -718,8 +718,10 @@ const URLS = {
   // Data (Recovered, up to 11 Sep 2026). Real per-employee Normal/Double OT
   // hours, replacing the date-assumption OT/DOT split for dates from
   // OT_ATTENDANCE_CUTOVER onward (see parseAttendanceOT()).
-  attendDaily:'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiSwmrNY-PMcc_pw9TsNZc0GdwCicqODiaj5u35KogKzHRFNZCnpHeKIDFIKLIdg/pub?gid=1559956087&single=true&output=csv',
-  attendHist: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiSwmrNY-PMcc_pw9TsNZc0GdwCicqODiaj5u35KogKzHRFNZCnpHeKIDFIKLIdg/pub?gid=521886816&single=true&output=csv',
+  // Re-published 24 Sep 2026 from the tracker HR actually maintains (the
+  // earlier links pointed at an old copy with a single Daily Entry row).
+  attendDaily:'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=634849101&single=true&output=csv',
+  attendHist: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=422945577&single=true&output=csv',
 };
 
 // Cutover date: before this, OT/DOT is estimated from Labour Allocation totals
@@ -1827,7 +1829,7 @@ async function connectAll(){
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
   console.log('connectAll starting for range:', from, 'to', to, 'requestId:', myRequestId);
 
-  const [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows,qualRows,batchCsvRows,attendDailyRows,attendHistRows]=await Promise.all([
+  let [labRows,engRows,elecDRows,elecBRows,capRows,prodRows,srcRows,qualRows,batchCsvRows,attendDailyRows,attendHistRows]=await Promise.all([
     fetchCSV(URLS.labourCSV),
     fetchCSV(URLS.eng),
     fetchCSV(URLS.elecDaily),
@@ -1855,6 +1857,13 @@ async function connectAll(){
 
   // Parse labour allocation CSV, merging in attendance-verified OT/DOT
   // (Labor Attendance Tracker) for dates from OT_ATTENDANCE_CUTOVER onward.
+  // Safety net: if the two tracker links are ever swapped, tell them apart by
+  // size — Historical Data holds a year+ of rows, Daily Entry only weeks.
+  if(attendDailyRows.length > attendHistRows.length){
+    [attendDailyRows, attendHistRows] = [attendHistRows, attendDailyRows];
+    rawAttendDaily = attendDailyRows; rawAttendHist = attendHistRows;
+    console.warn('Attendance tracker links look swapped — corrected automatically.');
+  }
   if(labRows.length > 0) {
     const attendOT = parseAttendanceOT(attendDailyRows, attendHistRows, from, to);
     allocData = parseLabourCSV(labRows, from, to, attendOT);
