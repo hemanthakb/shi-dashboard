@@ -1095,7 +1095,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
   const attendRateForDate = date => {
     const a = attendByDate[date];
     if(!a || date < OT_ATTENDANCE_CUTOVER) return null;
-    const hrs = a.normal + a.ot + a.dot;
+    const hrs = a.normal + a.ot + a.dot;   // payroll staff only (contract rows carry no hours)
     return hrs > 0 ? a.cost / hrs : null;
   };
   const edRate = {};
@@ -1167,7 +1167,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
     // Dates with attendance-verified hours (OT_ATTENDANCE_CUTOVER+) take their
     // normal/OT/DOT split from the tracker instead (merged in below) — skip
     // here so the same hours aren't split twice by two different methods.
-    if(attendCovers && date >= OT_ATTENDANCE_CUTOVER && attendOT.byDate[date]) return;
+    if(attendCovers && date >= OT_ATTENDANCE_CUTOVER && attendOT.byDate[date] && attendOT.byDate[date].present > 0) return;
     // Actuals from the tracker wherever HR has entered the day. A day with ERP
     // hours that HR hasn't entered YET is estimated from ERP hours (confirmed
     // with HOM, 24 Sep 2026) and is replaced by actuals automatically on the
@@ -1218,6 +1218,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
       dotCost:     Math.round(dotCost),
       attendanceVerified: attendCovers,
       attendStats: attendOT ? attendOT.stats : null,
+      contract: attendOT ? attendOT.contract : null,
       estNormalHours: parseFloat(estNormalHours.toFixed(2)),
       estOtHours:  parseFloat(estOtHours.toFixed(2)),
       estDotHours: parseFloat(estDotHours.toFixed(2)),
@@ -1328,9 +1329,20 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
   console.log('Attendance tracker read:', JSON.stringify(stats));
 
   const workedEmployees = new Set();
+  const contract = { days:0, cost:0, people:new Set(), otHrsIgnored:0, dotHrsIgnored:0 };
   byEmpDay.forEach(({nd, r}, key) => {
     const total = sf(r['total_hours']);            // clock span In→Out, incl. lunch break
     if(total <= 0) return; // blank/leave/no-show row — nothing worked
+    // Contract (C/MP) workers: fixed daily rate, no OT/DOT — kept out of the
+    // normal/OT/DOT figures and the OT gauge entirely.
+    if(isContractEPF(r['epf_no'])){
+      contract.days++; contract.cost += EMPLOYMENT_RATES.CONTRACT_DAY_RATE;
+      contract.people.add(String(r['name']||'').trim().toLowerCase());
+      contract.otHrsIgnored += sf(r['normal_ot_hours']); contract.dotHrsIgnored += sf(r['double_ot_hours']);
+      if(!byDate[nd]) byDate[nd] = { normal:0, ot:0, dot:0, cost:0, present:0 };
+      byDate[nd].contractDays = (byDate[nd].contractDays||0) + 1;
+      return;
+    }
     // One person = their EPF number; contract (C/MP) and new-hire rows share
     // placeholder EPFs ("C/MP", "New"), so those are counted by name instead.
     { const [, epfK, nameK] = key.split('|');
@@ -1369,6 +1381,8 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
     byDate,
     stats,
     headcount: workedEmployees.size,
+    contract: { days: contract.days, cost: contract.cost, people: contract.people.size,
+                otHrsIgnored: parseFloat(contract.otHrsIgnored.toFixed(2)), dotHrsIgnored: parseFloat(contract.dotHrsIgnored.toFixed(2)) },
   };
 }
 
@@ -1488,8 +1502,12 @@ const EMPLOYMENT_RATES = (() => {
     // where hours can't be split into normal/OT — product standards and the
     // fallback when Labour Allocation isn't loaded.
     stdDayHr: stdDayCost / (NORMAL_DAY_HRS + STD_OT_HRS),
+    // Contract manpower (EPF entered as "C/MP"): fixed Rs 2,800 per day worked,
+    // no OT and no Double OT (confirmed by HOM, 24 Sep 2026).
+    CONTRACT_DAY_RATE: 2800,
   };
 })();
+const isContractEPF = epf => /^c\s*\/?\s*mp$/i.test(String(epf||'').trim());
 
 // ── SPLIT ONE EMPLOYEE-DAY INTO NORMAL / OT / DOT HOURS ───────────────────────
 // Sunday/Poya: all hours DOT. Weekday: first 8 hrs normal, rest OT.
@@ -2921,7 +2939,9 @@ function renderMix(c){
 //                 not yet entered use the month's average attendance so far.
 //                 (Per HOM, 24 Sep 2026 — avoids double-counting new hires who
 //                 appear as "New" then get an EPF no., and part-month workers.)
-//   Pace        = actual Normal OT to last entered date ÷ budget to that date
+//   Used        = actual Normal OT to last entered date ÷ FULL-MONTH budget
+//                 (per HOM, 24 Sep 2026: the needle shows how much of the
+//                 month's OT budget has been consumed, not pace-to-date)
 //   Status      = GREEN < AMBER trigger ≤ AMBER ≤ RED trigger < RED
 //   Projection  = actual ÷ (budget to date ÷ full-month budget)  (tracker E17)
 // Always tracks the LATEST month HR has entered in the tracker (independent of
@@ -2948,7 +2968,7 @@ function computeOTGauge(){
   const monthEnd = `${y}-${pad(m)}-${pad(lastDay)}`;
   if(!rawAttendDaily.length && !rawAttendHist.length) return { monthStart, monthEnd, noData:true };
   const att = parseAttendanceOT(rawAttendDaily, rawAttendHist, monthStart, monthEnd);
-  const dates = Object.keys(att.byDate||{}).sort();
+  const dates = Object.keys(att.byDate||{}).filter(d => att.byDate[d].present > 0).sort();
   if(!att.used || !dates.length) return { monthStart, monthEnd, noData:true };
   const lastActual = dates[dates.length-1];
   const G = OT_GAUGE;
@@ -2974,7 +2994,7 @@ function computeOTGauge(){
   }
   const hc = Math.round(avgWd);
   const actual = att.otHours, dot = att.dotHours;
-  const pace = budgetToDate>0 ? actual/budgetToDate : 0;
+  const pace = budgetMonth>0 ? actual/budgetMonth : 0;   // share of the MONTH's budget used
   const status = pace > G.red ? 'RED' : pace >= G.amber ? 'AMBER' : 'GREEN';
   const projected = budgetToDate>0 ? actual/(budgetToDate/budgetMonth) : actual;
   const remaining = budgetMonth - actual;
@@ -3004,7 +3024,7 @@ function renderOTGauge(){
   const arc = (v0,v1,c) => { const [x0,y0]=pt(v0),[x1,y1]=pt(v1); return `<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="${c}" stroke-width="18"/>`; };
   const [nx,ny] = (()=>{ const a=Math.PI*(1-Math.min(Math.max(g.pace,0),G.scaleMax)/G.scaleMax); return [cx+74*Math.cos(a), cy-74*Math.sin(a)]; })();
   const lbl = (v,t,dx,dy) => { const [x,y]=pt(v); return `<text x="${(x+dx).toFixed(0)}" y="${(y+dy).toFixed(0)}" font-size="9" fill="#8b92a5">${t}</text>`; };
-  const svg = `<svg viewBox="0 0 220 132" width="230" role="img" aria-label="OT pace ${Math.round(g.pace*100)}%">
+  const svg = `<svg viewBox="0 0 220 132" width="230" role="img" aria-label="OT used ${Math.round(g.pace*100)}% of month budget">
     ${arc(0,G.amber,'#1a7a3c')}${arc(G.amber,G.red,'#e8a000')}${arc(G.red,G.scaleMax,'#c0392b')}
     <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#1a1d26" stroke-width="4" stroke-linecap="round"/>
     <circle cx="${cx}" cy="${cy}" r="8" fill="#1a1d26"/>
@@ -3016,11 +3036,11 @@ function renderOTGauge(){
   el.innerHTML = `
     <div style="text-align:center">${svg}
       <div class="otg-pace" style="color:${col}">${Math.round(g.pace*100)}% <span class="otg-chip" style="background:${bg};color:${col}">${g.status}</span></div>
-      <div class="otg-cap">OT pace vs budget · ${monthName(g.monthStart)} · actual to ${fmtD(g.lastActual)}</div>
+      <div class="otg-cap">OT used of ${monthName(g.monthStart)} budget · actual to ${fmtD(g.lastActual)}</div>
     </div>
-    <div><div class="otg-lbl">OT to date (actual)</div>
-      <div class="otg-big">${hrs(g.actual)}</div>
-      <div class="otg-sub">${fmt(g.actual*R.otHr)} · budget to date ${hrs(g.budgetToDate)}</div>
+    <div><div class="otg-lbl">Actual vs month budget</div>
+      <div class="otg-big">${hrs(g.actual)} <span style="font-size:13px;font-weight:600;color:var(--text3)">of ${hrs(g.budgetMonth)}</span></div>
+      <div class="otg-sub">${fmt(g.actual*R.otHr)} of ${fmt(g.budgetMonth*R.otHr)} budget</div>
       <div class="otg-note">Double OT: <b>${hrs(g.dot)} · ${fmt(g.dot*R.dotHr)}</b> (no budget)</div></div>
     <div><div class="otg-lbl">If we continue at this rate</div>
       <div class="otg-big">≈${hrs(g.projected)} by ${fmtD(g.monthEnd)}</div>
@@ -3032,7 +3052,7 @@ function renderOTGauge(){
       <div class="otg-sub">${g.remaining>0?`≈ ${g.perPersonDay.toFixed(1)} OT hrs/person/day for the ${g.daysLeft} working day${g.daysLeft>1?'s':''} left`:'Month budget already used'}</div>
       <div class="otg-note">${g.amberLimit>0?`Month ends AMBER if above ≈ ${g.amberLimit.toFixed(1)} hrs/person/day`:'Already past the AMBER line for the month'}</div>`
       : `<div class="otg-big">${hrs(Math.max(g.remaining,0))}</div><div class="otg-sub">All working days in the month entered</div>`}
-      <div class="otg-cap" style="text-align:left;margin-top:6px">Budget = people present each day × ${G.weekdayBudgetHrs} hrs (weekday) / ${G.saturdayBudgetHrs} hrs (Sat) · avg ${g.hc} present on weekdays, ${g.avgSat} on Saturdays</div></div>`;
+      <div class="otg-cap" style="text-align:left;margin-top:6px">Payroll staff only (C/MP contract workers have no OT) · Budget = people present each day × ${G.weekdayBudgetHrs} hrs (weekday) / ${G.saturdayBudgetHrs} hrs (Sat) · avg ${g.hc} present on weekdays, ${g.avgSat} on Saturdays</div></div>`;
 }
 
 // ── RENDER LABOUR SECTION ─────────────────────────────────────────────────────
@@ -3096,7 +3116,7 @@ function renderLabour(c){
     const momLblL = `Last month (${prevRangeL.from} to ${prevRangeL.to})`;
 
     $('labour-kpis').innerHTML=`
-      <div class="stream-card labour"><div class="klbl">Normal Hours Cost · ${lkr(R.normalHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div>${cardLines(otb.normalHours, otb.normalCost, otb.estNormalHours||0, otb.estNormalCost||0)}${momLine(momLblL,otb.normalCost,otbPrev.normalCost)}</div>
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost · ${lkr(R.normalHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div>${cardLines(otb.normalHours, otb.normalCost, otb.estNormalHours||0, otb.estNormalCost||0)}${(otb.contract && otb.contract.days>0) ? `<div class="kmom">Contract (C/MP) · fixed LKR ${R.CONTRACT_DAY_RATE.toLocaleString()}/day, no OT: <b>${otb.contract.days} days · ${fmt(otb.contract.cost)}</b></div>` : ''}${momLine(momLblL,otb.normalCost,otbPrev.normalCost)}</div>
       <div class="stream-card maint"><div class="klbl">Overtime Cost · ${lkr(R.otHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div>${cardLines(otb.otHours, otb.otCost, otb.estOtHours||0, otb.estOtCost||0)}${momLine(momLblL,otb.otCost,otbPrev.otCost)}</div>
       <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya · ${lkr(R.dotHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div>${cardLines(otb.dotHours, otb.dotCost, otb.estDotHours||0, otb.estDotCost||0)}${momLine(momLblL,otb.dotCost,otbPrev.dotCost)}</div>
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · normal + OT + DOT costed separately</div>${momLine(momLblL,labTotal,prevLabTotal)}</div>`;
