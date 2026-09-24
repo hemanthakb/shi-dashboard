@@ -1136,6 +1136,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
   // rate (EMPLOYMENT_RATES.normalHr / otHr / dotHr) — never blended.
   let normalHours = 0, otHours = 0, dotHours = 0;
   let normalCost  = 0, otCost  = 0, dotCost  = 0;
+  let estOtHours = 0, estDotHours = 0; const estDates = new Set(); // on/after cutover but not in the tracker
   const R = EMPLOYMENT_RATES;
 
   const attendCovers = !!(attendOT && attendOT.used);
@@ -1146,6 +1147,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
     // here so the same hours aren't split twice by two different methods.
     if(attendCovers && date >= OT_ATTENDANCE_CUTOVER && attendOT.byDate[date]) return;
     const sp = splitDayHours(date, hours);
+    if(date >= OT_ATTENDANCE_CUTOVER){ estOtHours += sp.ot; estDotHours += sp.dot; estDates.add(date); }
     normalHours += sp.normal; otHours += sp.ot; dotHours += sp.dot;
     normalCost  += sp.normal * R.normalHr;
     otCost      += sp.ot * R.otHr;
@@ -1184,6 +1186,10 @@ function parseLabourCSV(rows, from, to, attendOT) {
       otCost:      Math.round(otCost),
       dotCost:     Math.round(dotCost),
       attendanceVerified: attendCovers,
+      attendStats: attendOT ? attendOT.stats : null,
+      estOtHours: parseFloat(estOtHours.toFixed(2)),
+      estDotHours: parseFloat(estDotHours.toFixed(2)),
+      estDates: [...estDates].sort(),
     },
     rates: {
       normalHr: EMPLOYMENT_RATES.normalHr,
@@ -1220,9 +1226,19 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
   // mm-dd-yy (export as e.g. "09-01-26" = 1 Sep 2026); Historical Data is
   // dd/mm/yyyy. Previously every Daily Entry date failed to parse, so all of
   // its OT/DOT (incl. every Double OT hour) was silently dropped.
+  const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+  const ymd = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
   const parseTrackerDate = (raw, sheet) => {
-    const v = String(raw||'').trim();
+    let v = String(raw||'').trim().replace(/[\sT]+\d{1,2}:\d{2}(:\d{2})?.*$/,''); // drop any time part
     if(!v) return '';
+    if(/^\d{5}(\.\d+)?$/.test(v)){ // Excel/Sheets serial day number
+      const d = new Date(Date.UTC(1899,11,30) + Math.floor(parseFloat(v))*86400000);
+      return ymd(d.getUTCFullYear(), d.getUTCMonth()+1, d.getUTCDate());
+    }
+    let t = v.match(/^(\d{1,2})[-\s\/]([A-Za-z]{3})[A-Za-z]*[-\s\/,]+(\d{2}|\d{4})$/);           // 1-Sep-2026
+    if(t && MON[t[2].toLowerCase()]) return ymd(t[3].length===2?'20'+t[3]:t[3], MON[t[2].toLowerCase()], parseInt(t[1]));
+    t = v.match(/^(?:[A-Za-z]+,?\s+)?([A-Za-z]{3})[A-Za-z]*[\s-]+(\d{1,2}),?[\s-]+(\d{2}|\d{4})$/);  // Sep 1, 2026
+    if(t && MON[t[1].toLowerCase()]) return ymd(t[3].length===2?'20'+t[3]:t[3], MON[t[1].toLowerCase()], parseInt(t[2]));
     const m = v.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2}|\d{4})$/);
     if(m){
       const a = parseInt(m[1]), b = parseInt(m[2]);
@@ -1242,17 +1258,26 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
   // times), so where both sheets have the same employee-day, Daily Entry
   // wins (it's the maintained sheet and carries later corrections).
   const byEmpDay = new Map();
+  const stats = { daily:{ fetched:(dailyRows||[]).length, inRange:0, badDate:0, first:'', last:'', sample:'' },
+                  hist: { fetched:(histRows||[]).length,  inRange:0, badDate:0, dupSkipped:0 } };
   const add = (rows, sheet) => (rows||[]).forEach(r => {
-    const nd = parseTrackerDate(r['date'], sheet);
-    if(!nd || !/^20\d{2}-\d{2}-\d{2}$/.test(nd) || nd < floor || nd > to) return;
+    const st = stats[sheet];
+    const raw = String(r['date']||'').trim();
+    if(!raw) return;
+    const nd = parseTrackerDate(raw, sheet);
+    if(!nd || !/^20\d{2}-\d{2}-\d{2}$/.test(nd)){ st.badDate++; if(!st.sample) st.sample = raw; return; }
+    if(nd < floor || nd > to) return;
+    st.inRange++;
+    if(sheet === 'daily'){ if(!st.first || nd < st.first) st.first = nd; if(!st.last || nd > st.last) st.last = nd; }
     const epf  = String(r['epf_no']||'').trim().replace(/\.0$/,'');
     const name = String(r['name']||'').trim().toLowerCase();
     const key  = `${nd}|${epf}|${name}`;
-    if(sheet === 'hist' && byEmpDay.has(key)) return; // Daily Entry already has this employee-day
+    if(sheet === 'hist' && byEmpDay.has(key)){ st.dupSkipped++; return; } // Daily Entry already has this employee-day
     byEmpDay.set(key, { nd, r });
   });
   add(dailyRows, 'daily');
   add(histRows,  'hist');
+  console.log('Attendance tracker read:', JSON.stringify(stats));
 
   byEmpDay.forEach(({nd, r}) => {
     const total = sf(r['total_hours']);            // clock span In→Out, incl. lunch break
@@ -1288,6 +1313,7 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
     otCost:      Math.round(otCost),
     dotCost:     Math.round(dotCost),
     byDate,
+    stats,
   };
 }
 
@@ -2842,9 +2868,19 @@ function renderLabour(c){
     // hours (Labor Attendance Tracker) from that date onward. Each part is
     // costed at its own rate (normal / OT / DOT), never blended.
     const otb = allocData.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
-    const otSrcNote = otb.attendanceVerified
-      ? ` · attendance-verified from ${OT_ATTENDANCE_CUTOVER}`
-      : '';
+    const fmtD = d => d ? d.slice(8,10)+'/'+d.slice(5,7) : '';
+    const as = otb.attendStats;
+    let otSrcNote = '';
+    if(as){
+      const dl = as.daily;
+      otSrcNote = ` · Tracker: Daily Entry ${dl.inRange} rows${dl.first?` (${fmtD(dl.first)}–${fmtD(dl.last)})`:''}` +
+                  (dl.fetched>0 && dl.inRange===0 && dl.badDate>0 ? ` ⚠ dates unreadable, e.g. "${dl.sample}"` : '') +
+                  (dl.fetched===0 ? ' ⚠ sheet not loaded' : '') +
+                  ` + Historical ${as.hist.inRange - as.hist.dupSkipped} rows`;
+      if(otb.estDates && otb.estDates.length) otSrcNote += ` · ${otb.estDates.length} day(s) not in tracker estimated from ERP hours`;
+    }
+    const estOtNote  = otb.estOtHours  > 0 ? ` (incl. ${otb.estOtHours.toFixed(1)} hrs estimated)`  : '';
+    const estDotNote = otb.estDotHours > 0 ? ` (incl. ${otb.estDotHours.toFixed(1)} hrs estimated)` : '';
 
     // Last-month reference for each stream (same full-prior-calendar-month
     // rule as the top KPI board — see getPrevMonthRange).
@@ -2858,8 +2894,8 @@ function renderLabour(c){
 
     $('labour-kpis').innerHTML=`
       <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs × ${lkr(R.normalHr)}/hr · ${src}</div>${momLine(momLblL,otb.normalCost,otbPrev.normalCost)}</div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 8 hrs/day (Sat: after 5 hrs) × ${lkr(R.otHr)}/hr${otSrcNote}</div>${momLine(momLblL,otb.otCost,otbPrev.otCost)}</div>
-      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h × ${lkr(R.dotHr)}/hr${otSrcNote}</div>${momLine(momLblL,otb.dotCost,otbPrev.dotCost)}</div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs${estOtNote} above 8 hrs/day (Sat: after 5 hrs) × ${lkr(R.otHr)}/hr${otSrcNote}</div>${momLine(momLblL,otb.otCost,otbPrev.otCost)}</div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs${estDotNote} on Sunday/Poya days + Saturday hrs past 18h × ${lkr(R.dotHr)}/hr${otSrcNote}</div>${momLine(momLblL,otb.dotCost,otbPrev.dotCost)}</div>
       <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · normal + OT + DOT costed separately</div>${momLine(momLblL,labTotal,prevLabTotal)}</div>`;
   } else {
     // No live data — show placeholder
