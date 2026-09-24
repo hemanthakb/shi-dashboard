@@ -1352,7 +1352,8 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
     normalCost  += normal * R.normalHr; otCost += ot * R.otHr; dotCost += dot * R.dotHr;
     rowsUsed++;
 
-    if(!byDate[nd]) byDate[nd] = { normal:0, ot:0, dot:0, cost:0 };
+    if(!byDate[nd]) byDate[nd] = { normal:0, ot:0, dot:0, cost:0, present:0 };
+    byDate[nd].present++;   // people who actually worked that day (OT gauge budget)
     byDate[nd].normal += normal; byDate[nd].ot += ot; byDate[nd].dot += dot; byDate[nd].cost += rowCost;
   });
 
@@ -2915,13 +2916,17 @@ function renderMix(c){
 // raw Daily Entry rows (never trust a formula column) and always measured to
 // the LAST DATE HR HAS ENTERED — not today — so missing days can't make the
 // pace look artificially low.
-//   Budget/day  = active headcount × 3 hrs (weekday) or × 7 hrs (Saturday);
-//                 Sundays and Poya days carry no OT budget.
+//   Budget/day  = people who actually worked that day × 3 hrs (weekday) or
+//                 × 7 hrs (Saturday); Sundays/Poya carry no OT budget. Days
+//                 not yet entered use the month's average attendance so far.
+//                 (Per HOM, 24 Sep 2026 — avoids double-counting new hires who
+//                 appear as "New" then get an EPF no., and part-month workers.)
 //   Pace        = actual Normal OT to last entered date ÷ budget to that date
 //   Status      = GREEN < AMBER trigger ≤ AMBER ≤ RED trigger < RED
 //   Projection  = actual ÷ (budget to date ÷ full-month budget)  (tracker E17)
-// Covers the calendar month of the "Date To" filter, whole factory (the
-// tracker isn't split by production line). Double OT has no budget, so it is
+// Always tracks the LATEST month HR has entered in the tracker (independent of
+// the date filters), so it stays current on every refresh without anyone
+// changing dates. Whole factory (the tracker isn't split by production line). Double OT has no budget, so it is
 // shown alongside rather than in the needle.
 const OT_GAUGE = {
   weekdayBudgetHrs: 3,    // OT hrs/person/weekday  (tracker B5)
@@ -2931,8 +2936,12 @@ const OT_GAUGE = {
   scaleMax: 1.20,         // needle scale end (pace above this pins at the end)
 };
 function computeOTGauge(){
-  const toVal = ($('f-to')||{}).value; if(!toVal) return null;
-  const [y,m] = toVal.split('-').map(Number);
+  if(!rawAttendDaily.length && !rawAttendHist.length) return null;
+  // Latest date HR has entered (from the cutover on) sets the month to track.
+  const all = parseAttendanceOT(rawAttendDaily, rawAttendHist, OT_ATTENDANCE_CUTOVER, '2099-12-31');
+  const allDates = Object.keys(all.byDate||{}).sort();
+  if(!allDates.length) return null;
+  const [y,m] = allDates[allDates.length-1].split('-').map(Number);
   const pad = n => String(n).padStart(2,'0');
   const monthStart = `${y}-${pad(m)}-01`;
   const lastDay = new Date(y, m, 0).getDate();
@@ -2942,27 +2951,36 @@ function computeOTGauge(){
   const dates = Object.keys(att.byDate||{}).sort();
   if(!att.used || !dates.length) return { monthStart, monthEnd, noData:true };
   const lastActual = dates[dates.length-1];
-  const hc = att.headcount || 0;
   const G = OT_GAUGE;
-  const dayBudget = d => {
-    if(isSundayOrPoya(d)) return 0;
-    return new Date(d+'T00:00:00').getDay()===6 ? G.saturdayBudgetHrs : G.weekdayBudgetHrs;
-  };
-  let budgetToDate=0, budgetMonth=0, daysLeft=0;
+  const kind = d => isSundayOrPoya(d) ? 'off' : (new Date(d+'T00:00:00').getDay()===6 ? 'sat' : 'wd');
+  const perHr = { wd:G.weekdayBudgetHrs, sat:G.saturdayBudgetHrs, off:0 };
+  // Average attendance on entered weekdays / Saturdays (for days not yet entered)
+  const seen = { wd:[], sat:[] };
+  dates.forEach(d => { const k = kind(d); if(k!=='off' && att.byDate[d].present>0) seen[k].push(att.byDate[d].present); });
+  const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+  const avgWd = avg(seen.wd), avgSat = seen.sat.length ? avg(seen.sat) : avgWd;
+  let budgetToDate=0, budgetMonth=0, daysLeft=0, personDaysLeft=0;
   for(let dd=1; dd<=lastDay; dd++){
-    const d = `${y}-${pad(m)}-${pad(dd)}`;
-    const b = dayBudget(d) * hc;
-    budgetMonth += b;
-    if(d <= lastActual) budgetToDate += b; else if(b>0) daysLeft++;
+    const d = `${y}-${pad(m)}-${pad(dd)}`, k = kind(d);
+    if(k==='off') continue;
+    if(d <= lastActual){
+      const b = ((att.byDate[d]||{}).present||0) * perHr[k];
+      budgetToDate += b; budgetMonth += b;
+    } else {
+      const ppl = k==='sat' ? avgSat : avgWd;
+      budgetMonth += ppl * perHr[k];
+      personDaysLeft += ppl; daysLeft++;
+    }
   }
+  const hc = Math.round(avgWd);
   const actual = att.otHours, dot = att.dotHours;
   const pace = budgetToDate>0 ? actual/budgetToDate : 0;
   const status = pace > G.red ? 'RED' : pace >= G.amber ? 'AMBER' : 'GREEN';
   const projected = budgetToDate>0 ? actual/(budgetToDate/budgetMonth) : actual;
   const remaining = budgetMonth - actual;
-  const perPersonDay = (hc>0 && daysLeft>0) ? remaining/hc/daysLeft : 0;
-  const amberLimit  = (hc>0 && daysLeft>0) ? (G.amber*budgetMonth - actual)/hc/daysLeft : 0;
-  return { monthStart, monthEnd, lastActual, hc, budgetToDate, budgetMonth, daysLeft,
+  const perPersonDay = personDaysLeft>0 ? remaining/personDaysLeft : 0;
+  const amberLimit  = personDaysLeft>0 ? (G.amber*budgetMonth - actual)/personDaysLeft : 0;
+  return { monthStart, monthEnd, lastActual, hc, avgSat:Math.round(avgSat), budgetToDate, budgetMonth, daysLeft,
            actual, dot, pace, status, projected, remaining, perPersonDay, amberLimit };
 }
 function renderOTGauge(){
@@ -2974,9 +2992,7 @@ function renderOTGauge(){
   const hrs = v => Math.round(v).toLocaleString()+' hrs';
   if(!g || g.noData){
     el.className='otg none';
-    const msg = g && g.monthEnd < OT_ATTENDANCE_CUTOVER
-      ? `OT pace gauge starts from ${monthName(OT_ATTENDANCE_CUTOVER)}, when the Labour Attendance Tracker became the OT source.`
-      : `OT pace gauge — no Labour Attendance Tracker entries for ${g?monthName(g.monthStart):'this month'} yet.`;
+    const msg = 'OT pace gauge — waiting for Labour Attendance Tracker data (loads with the dashboard refresh).';
     el.innerHTML = `<div class="otg-cap" style="grid-column:1/-1;text-align:left">${msg}</div>`;
     return;
   }
@@ -3016,7 +3032,7 @@ function renderOTGauge(){
       <div class="otg-sub">${g.remaining>0?`≈ ${g.perPersonDay.toFixed(1)} OT hrs/person/day for the ${g.daysLeft} working day${g.daysLeft>1?'s':''} left`:'Month budget already used'}</div>
       <div class="otg-note">${g.amberLimit>0?`Month ends AMBER if above ≈ ${g.amberLimit.toFixed(1)} hrs/person/day`:'Already past the AMBER line for the month'}</div>`
       : `<div class="otg-big">${hrs(Math.max(g.remaining,0))}</div><div class="otg-sub">All working days in the month entered</div>`}
-      <div class="otg-cap" style="text-align:left;margin-top:6px">${g.hc} people · budget ${G.weekdayBudgetHrs} hrs/weekday, ${G.saturdayBudgetHrs} hrs/Saturday</div></div>`;
+      <div class="otg-cap" style="text-align:left;margin-top:6px">Budget = people present each day × ${G.weekdayBudgetHrs} hrs (weekday) / ${G.saturdayBudgetHrs} hrs (Sat) · avg ${g.hc} present on weekdays, ${g.avgSat} on Saturdays</div></div>`;
 }
 
 // ── RENDER LABOUR SECTION ─────────────────────────────────────────────────────
