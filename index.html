@@ -224,6 +224,22 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 }
 
 
+/* ── OT PACE GAUGE ─────────────────────────────────────────────────────────── */
+.otg{background:#fff;border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:14px 18px;display:grid;grid-template-columns:250px 1fr 1fr 1fr;gap:18px;align-items:center;
+  margin-bottom:14px;border-top:3px solid var(--green);}
+.otg.amber{border-top-color:var(--gold);} .otg.red{border-top-color:var(--red);} .otg.none{border-top-color:var(--border2);}
+.otg-lbl{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;}
+.otg-big{font-size:20px;font-weight:700;color:var(--text);line-height:1.2;}
+.otg-sub{font-size:11px;color:var(--text2);margin-top:2px;}
+.otg-note{font-size:11px;margin-top:6px;color:var(--text2);}
+.otg-pace{font-size:26px;font-weight:800;margin-top:-6px;text-align:center;}
+.otg-chip{font-size:12px;padding:2px 9px;border-radius:20px;vertical-align:middle;}
+.otg-cap{font-size:10px;color:var(--text3);text-align:center;}
+@media(max-width:1100px){.otg{grid-template-columns:1fr 1fr;}}
+@media(max-width:768px){.otg{grid-template-columns:1fr;}}
+@media print{.otg{box-shadow:none;border:1px solid #ccc;page-break-inside:avoid;}}
+
 /* ── SECTION DIVIDERS ─────────────────────────────────────────────────────── */
 .section-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
   letter-spacing:1px;margin:22px 0 12px;display:flex;align-items:center;gap:10px;}
@@ -425,6 +441,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   <!-- ── LABOUR SECTION ───────────────────────────────────────────────────── -->
   <div data-print-section="labour" style="display:contents">
   <div class="section-title">Labour <span class="section-tag tag-labour">ERP Allocation</span></div>
+  <div class="otg" id="ot-gauge"></div>
   <div class="stream-grid" id="labour-kpis"></div>
   <div class="egrid">
     <div class="cc">
@@ -1310,9 +1327,14 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
   }), 'hist');
   console.log('Attendance tracker read:', JSON.stringify(stats));
 
-  byEmpDay.forEach(({nd, r}) => {
+  const workedEmployees = new Set();
+  byEmpDay.forEach(({nd, r}, key) => {
     const total = sf(r['total_hours']);            // clock span In→Out, incl. lunch break
     if(total <= 0) return; // blank/leave/no-show row — nothing worked
+    // One person = their EPF number; contract (C/MP) and new-hire rows share
+    // placeholder EPFs ("C/MP", "New"), so those are counted by name instead.
+    { const [, epfK, nameK] = key.split('|');
+      workedEmployees.add(/^\d+$/.test(epfK) ? 'E'+epfK : 'N'+nameK); }
     const ot  = sf(r['normal_ot_hours']);
     const dot = sf(r['double_ot_hours']);
     // Normal paid hours: the tracker books OT after a 9-hr weekday span
@@ -1345,6 +1367,7 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
     dotCost:     Math.round(dotCost),
     byDate,
     stats,
+    headcount: workedEmployees.size,
   };
 }
 
@@ -2887,8 +2910,118 @@ function renderMix(c){
   });
 }
 
+// ── OT PACE GAUGE ("odometer") ───────────────────────────────────────────────
+// Same method as the tracker's OT Cost Alert tab, but calculated here from the
+// raw Daily Entry rows (never trust a formula column) and always measured to
+// the LAST DATE HR HAS ENTERED — not today — so missing days can't make the
+// pace look artificially low.
+//   Budget/day  = active headcount × 3 hrs (weekday) or × 7 hrs (Saturday);
+//                 Sundays and Poya days carry no OT budget.
+//   Pace        = actual Normal OT to last entered date ÷ budget to that date
+//   Status      = GREEN < AMBER trigger ≤ AMBER ≤ RED trigger < RED
+//   Projection  = actual ÷ (budget to date ÷ full-month budget)  (tracker E17)
+// Covers the calendar month of the "Date To" filter, whole factory (the
+// tracker isn't split by production line). Double OT has no budget, so it is
+// shown alongside rather than in the needle.
+const OT_GAUGE = {
+  weekdayBudgetHrs: 3,    // OT hrs/person/weekday  (tracker B5)
+  saturdayBudgetHrs: 7,   // OT hrs/person/Saturday, 1pm–8pm (tracker B6)
+  amber: 0.80,            // Amber trigger (tracker B7)
+  red:   0.95,            // Red trigger   (tracker B8)
+  scaleMax: 1.20,         // needle scale end (pace above this pins at the end)
+};
+function computeOTGauge(){
+  const toVal = ($('f-to')||{}).value; if(!toVal) return null;
+  const [y,m] = toVal.split('-').map(Number);
+  const pad = n => String(n).padStart(2,'0');
+  const monthStart = `${y}-${pad(m)}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const monthEnd = `${y}-${pad(m)}-${pad(lastDay)}`;
+  if(!rawAttendDaily.length && !rawAttendHist.length) return { monthStart, monthEnd, noData:true };
+  const att = parseAttendanceOT(rawAttendDaily, rawAttendHist, monthStart, monthEnd);
+  const dates = Object.keys(att.byDate||{}).sort();
+  if(!att.used || !dates.length) return { monthStart, monthEnd, noData:true };
+  const lastActual = dates[dates.length-1];
+  const hc = att.headcount || 0;
+  const G = OT_GAUGE;
+  const dayBudget = d => {
+    if(isSundayOrPoya(d)) return 0;
+    return new Date(d+'T00:00:00').getDay()===6 ? G.saturdayBudgetHrs : G.weekdayBudgetHrs;
+  };
+  let budgetToDate=0, budgetMonth=0, daysLeft=0;
+  for(let dd=1; dd<=lastDay; dd++){
+    const d = `${y}-${pad(m)}-${pad(dd)}`;
+    const b = dayBudget(d) * hc;
+    budgetMonth += b;
+    if(d <= lastActual) budgetToDate += b; else if(b>0) daysLeft++;
+  }
+  const actual = att.otHours, dot = att.dotHours;
+  const pace = budgetToDate>0 ? actual/budgetToDate : 0;
+  const status = pace > G.red ? 'RED' : pace >= G.amber ? 'AMBER' : 'GREEN';
+  const projected = budgetToDate>0 ? actual/(budgetToDate/budgetMonth) : actual;
+  const remaining = budgetMonth - actual;
+  const perPersonDay = (hc>0 && daysLeft>0) ? remaining/hc/daysLeft : 0;
+  const amberLimit  = (hc>0 && daysLeft>0) ? (G.amber*budgetMonth - actual)/hc/daysLeft : 0;
+  return { monthStart, monthEnd, lastActual, hc, budgetToDate, budgetMonth, daysLeft,
+           actual, dot, pace, status, projected, remaining, perPersonDay, amberLimit };
+}
+function renderOTGauge(){
+  const el = $('ot-gauge'); if(!el) return;
+  const g = computeOTGauge();
+  const R = EMPLOYMENT_RATES, G = OT_GAUGE;
+  const fmtD = d => d ? d.slice(8,10)+'/'+d.slice(5,7) : '';
+  const monthName = d => new Date(d+'T00:00:00').toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  const hrs = v => Math.round(v).toLocaleString()+' hrs';
+  if(!g || g.noData){
+    el.className='otg none';
+    const msg = g && g.monthEnd < OT_ATTENDANCE_CUTOVER
+      ? `OT pace gauge starts from ${monthName(OT_ATTENDANCE_CUTOVER)}, when the Labour Attendance Tracker became the OT source.`
+      : `OT pace gauge — no Labour Attendance Tracker entries for ${g?monthName(g.monthStart):'this month'} yet.`;
+    el.innerHTML = `<div class="otg-cap" style="grid-column:1/-1;text-align:left">${msg}</div>`;
+    return;
+  }
+  const col = {GREEN:'var(--green)',AMBER:'var(--gold-dk)',RED:'var(--red)'}[g.status];
+  const bg  = {GREEN:'var(--green-lt)',AMBER:'var(--gold-lt)',RED:'var(--red-lt)'}[g.status];
+  // Semicircle gauge: 0% at left, G.scaleMax at right
+  const cx=110, cy=110, r=90;
+  const pt = v => { const a=Math.PI*(1-Math.min(Math.max(v,0),G.scaleMax)/G.scaleMax); return [cx+r*Math.cos(a), cy-r*Math.sin(a)]; };
+  const arc = (v0,v1,c) => { const [x0,y0]=pt(v0),[x1,y1]=pt(v1); return `<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="${c}" stroke-width="18"/>`; };
+  const [nx,ny] = (()=>{ const a=Math.PI*(1-Math.min(Math.max(g.pace,0),G.scaleMax)/G.scaleMax); return [cx+74*Math.cos(a), cy-74*Math.sin(a)]; })();
+  const lbl = (v,t,dx,dy) => { const [x,y]=pt(v); return `<text x="${(x+dx).toFixed(0)}" y="${(y+dy).toFixed(0)}" font-size="9" fill="#8b92a5">${t}</text>`; };
+  const svg = `<svg viewBox="0 0 220 132" width="230" role="img" aria-label="OT pace ${Math.round(g.pace*100)}%">
+    ${arc(0,G.amber,'#1a7a3c')}${arc(G.amber,G.red,'#e8a000')}${arc(G.red,G.scaleMax,'#c0392b')}
+    <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#1a1d26" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="8" fill="#1a1d26"/>
+    ${lbl(0,'0%',-4,16)}${lbl(G.amber,Math.round(G.amber*100)+'%',-10,-14)}${lbl(G.red,Math.round(G.red*100)+'%',2,-12)}${lbl(G.scaleMax,Math.round(G.scaleMax*100)+'%+',-22,16)}
+  </svg>`;
+  const diff = g.budgetMonth - g.projected;
+  const under = diff >= 0;
+  el.className = 'otg ' + (g.status==='GREEN'?'':g.status.toLowerCase());
+  el.innerHTML = `
+    <div style="text-align:center">${svg}
+      <div class="otg-pace" style="color:${col}">${Math.round(g.pace*100)}% <span class="otg-chip" style="background:${bg};color:${col}">${g.status}</span></div>
+      <div class="otg-cap">OT pace vs budget · ${monthName(g.monthStart)} · actual to ${fmtD(g.lastActual)}</div>
+    </div>
+    <div><div class="otg-lbl">OT to date (actual)</div>
+      <div class="otg-big">${hrs(g.actual)}</div>
+      <div class="otg-sub">${fmt(g.actual*R.otHr)} · budget to date ${hrs(g.budgetToDate)}</div>
+      <div class="otg-note">Double OT: <b>${hrs(g.dot)} · ${fmt(g.dot*R.dotHr)}</b> (no budget)</div></div>
+    <div><div class="otg-lbl">If we continue at this rate</div>
+      <div class="otg-big">≈${hrs(g.projected)} by ${fmtD(g.monthEnd)}</div>
+      <div class="otg-sub">≈ ${fmt(g.projected*R.otHr)} vs budget ${hrs(g.budgetMonth)} · ${fmt(g.budgetMonth*R.otHr)}</div>
+      <div class="otg-note" style="font-weight:600;color:${under?'var(--green)':'var(--red)'}">${under?'▼':'▲'} ${hrs(Math.abs(diff))} (${fmt(Math.abs(diff)*R.otHr)}) ${under?'under':'over'} budget</div></div>
+    <div><div class="otg-lbl">Room left this month</div>
+      ${g.daysLeft>0 ? `
+      <div class="otg-big" style="${g.remaining<0?'color:var(--red)':''}">${g.remaining<0?'Over by ':''}${hrs(Math.abs(g.remaining))}</div>
+      <div class="otg-sub">${g.remaining>0?`≈ ${g.perPersonDay.toFixed(1)} OT hrs/person/day for the ${g.daysLeft} working day${g.daysLeft>1?'s':''} left`:'Month budget already used'}</div>
+      <div class="otg-note">${g.amberLimit>0?`Month ends AMBER if above ≈ ${g.amberLimit.toFixed(1)} hrs/person/day`:'Already past the AMBER line for the month'}</div>`
+      : `<div class="otg-big">${hrs(Math.max(g.remaining,0))}</div><div class="otg-sub">All working days in the month entered</div>`}
+      <div class="otg-cap" style="text-align:left;margin-top:6px">${g.hc} people · budget ${G.weekdayBudgetHrs} hrs/weekday, ${G.saturdayBudgetHrs} hrs/Saturday</div></div>`;
+}
+
 // ── RENDER LABOUR SECTION ─────────────────────────────────────────────────────
 function renderLabour(c){
+  renderOTGauge();
   // Labour KPI stream cards — use live allocation data if available
   const R = EMPLOYMENT_RATES;
   const lkr = v => 'LKR ' + v.toFixed(2);
