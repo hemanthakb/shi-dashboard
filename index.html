@@ -123,6 +123,12 @@ select:focus,input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(26,9
 .badge.dn{background:var(--green-lt);color:var(--green);}
 .badge.neu{background:var(--blue-lt);color:var(--blue);}
 .badge.warn{background:var(--amber-lt);color:var(--amber);}
+.kmom{font-size:10px;color:var(--text3);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.kmom b{color:var(--text2);font-weight:700;}
+.kmom-badge{display:inline-flex;align-items:center;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;}
+.kmom-badge.up{background:#fde8e6;color:var(--red);}
+.kmom-badge.dn{background:var(--green-lt);color:var(--green);}
+.kmom-badge.flat{background:var(--blue-lt);color:var(--blue);}
 
 /* CHARTS */
 .cgrid{display:grid;grid-template-columns:2fr 1fr;gap:15px;margin-bottom:18px;}
@@ -707,7 +713,7 @@ const URLS = {
   prodDB:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=592000704&single=true&output=csv',
   prodSrc:   'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4xxjWtco8IifPPzCfun7MLzfVXV1tdD0Rz1ICntdQdKUWup6gP20V_TCa2D9gBw/pub?gid=636362217&single=true&output=csv',
   qualityRej:'https://docs.google.com/spreadsheets/d/e/2PACX-1vRpJ6swt3zxbtSsRL1AY1bpVGvZ51UAqbf6yr78Dl9sHjRVXMtGqUAVqpFIRtY-Ag/pub?gid=51173236&single=true&output=csv',
-  batch:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1uXib5Q_T0KAQgfQwaP_dHMvC9qX1fxzRxLLxDhZXF1ceau-9mCVa36scNOhd2A/pub?gid=33894759&single=true&output=csv',
+  batch:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vSUZQAlhUDGZiMiy74YrR8EYFaQ1a9RoFjcRSH2QeBdeuG7ZclzvQ4VFxlJzVBsQQ/pub?gid=1991295149&single=true&output=csv',
   // Labor Attendance Tracker — Daily Entry (live, forward-going) and Historical
   // Data (Recovered, up to 11 Sep 2026). Real per-employee Normal/Double OT
   // hours, replacing the date-assumption OT/DOT split for dates from
@@ -1210,20 +1216,61 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
   const byDate = {};
   let rowsUsed = 0;
 
-  [...(dailyRows||[]), ...(histRows||[])].forEach(r => {
-    const dateRaw = String(r['date']||'').trim();
-    if(!dateRaw) return;
-    const nd = normaliseDate(dateRaw, 'DM'); // tracker exports DD/MM/YYYY, same as Labour Allocation
-    if(!nd || nd < floor || nd > to) return;
+  // Tracker date formats differ by sheet: Daily Entry cells are formatted
+  // mm-dd-yy (export as e.g. "09-01-26" = 1 Sep 2026); Historical Data is
+  // dd/mm/yyyy. Previously every Daily Entry date failed to parse, so all of
+  // its OT/DOT (incl. every Double OT hour) was silently dropped.
+  const parseTrackerDate = (raw, sheet) => {
+    const v = String(raw||'').trim();
+    if(!v) return '';
+    const m = v.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2}|\d{4})$/);
+    if(m){
+      const a = parseInt(m[1]), b = parseInt(m[2]);
+      const yr = m[3].length === 2 ? '20' + m[3] : m[3];
+      let mon, day;
+      if(a > 12)      { day = a; mon = b; }
+      else if(b > 12) { mon = a; day = b; }
+      else if(sheet === 'daily') { mon = a; day = b; } // mm-dd-yy
+      else            { day = a; mon = b; }            // dd/mm/yyyy
+      return `${yr}-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    }
+    return normaliseDate(v, sheet === 'daily' ? 'MD' : 'DM');
+  };
 
-    const total = sf(r['total_hours']);
+  // One record per employee per day. Historical Data (Recovered) repeats
+  // 1–11 Sep 2026 that are also in Daily Entry (same people, same clock
+  // times), so where both sheets have the same employee-day, Daily Entry
+  // wins (it's the maintained sheet and carries later corrections).
+  const byEmpDay = new Map();
+  const add = (rows, sheet) => (rows||[]).forEach(r => {
+    const nd = parseTrackerDate(r['date'], sheet);
+    if(!nd || !/^20\d{2}-\d{2}-\d{2}$/.test(nd) || nd < floor || nd > to) return;
+    const epf  = String(r['epf_no']||'').trim().replace(/\.0$/,'');
+    const name = String(r['name']||'').trim().toLowerCase();
+    const key  = `${nd}|${epf}|${name}`;
+    if(sheet === 'hist' && byEmpDay.has(key)) return; // Daily Entry already has this employee-day
+    byEmpDay.set(key, { nd, r });
+  });
+  add(dailyRows, 'daily');
+  add(histRows,  'hist');
+
+  byEmpDay.forEach(({nd, r}) => {
+    const total = sf(r['total_hours']);            // clock span In→Out, incl. lunch break
     if(total <= 0) return; // blank/leave/no-show row — nothing worked
     const ot  = sf(r['normal_ot_hours']);
     const dot = sf(r['double_ot_hours']);
-    const normal = Math.max(0, total - ot - dot);
+    // Normal paid hours: the tracker books OT after a 9-hr weekday span
+    // (8 working + 1 hr lunch) and after 1 pm on Saturday (8 am–1 pm = 5 hrs),
+    // matching the 45-hr week. So cap normal at 8 (weekday, lunch deducted)
+    // or 5 (Saturday) instead of treating the whole span as paid normal time.
+    const rest = Math.max(0, total - ot - dot);
+    const isSat = new Date(nd + 'T00:00:00').getDay() === 6;
+    const normal = isSat
+      ? Math.min(EMPLOYMENT_RATES.SATURDAY_NORMAL_HRS, rest)
+      : Math.min(EMPLOYMENT_RATES.NORMAL_DAY_HRS, rest >= 6 ? rest - 1 : rest);
 
-    normalHours += normal; otHours += ot; dotHours += dot;
     const rowCost = normal * R.normalHr + ot * R.otHr + dot * R.dotHr;
+    normalHours += normal; otHours += ot; dotHours += dot;
     normalCost  += normal * R.normalHr; otCost += ot * R.otHr; dotCost += dot * R.dotHr;
     rowsUsed++;
 
@@ -1351,10 +1398,11 @@ const EMPLOYMENT_RATES = (() => {
   const avg = k => (helper[k] + operator[k]) / 2;
   const normalHr = avg('normalHr'), otHr = avg('otHr'), dotHr = avg('dotHr'); // 380.14 / 243.75 / 325.00
   const NORMAL_DAY_HRS = 8, STD_OT_HRS = 3;
+  const SATURDAY_NORMAL_HRS = 5; // 8 am–1 pm; OT after 1 pm (5 × 8 + 5 = 45-hr week)
   const stdDayCost = normalHr * NORMAL_DAY_HRS + otHr * STD_OT_HRS;          // 3,772.36 per person
   return {
     helper, operator, normalHr, otHr, dotHr,
-    NORMAL_DAY_HRS, STD_OT_HRS, stdDayCost,
+    NORMAL_DAY_HRS, STD_OT_HRS, SATURDAY_NORMAL_HRS, stdDayCost,
     // Standard-day cost per working hour (3,772.36 ÷ 11 = 342.94). Used ONLY
     // where hours can't be split into normal/OT — product standards and the
     // fallback when Labour Allocation isn't loaded.
@@ -1363,14 +1411,16 @@ const EMPLOYMENT_RATES = (() => {
 })();
 
 // ── SPLIT ONE EMPLOYEE-DAY INTO NORMAL / OT / DOT HOURS ───────────────────────
-// Sunday/Poya: all hours DOT. Other days: first 8 hrs normal, rest OT.
-// Saturday 18+ hrs has run past midnight into Sunday, so hours beyond 18 are DOT
-// (8 normal + 10 OT + remainder DOT).
+// Sunday/Poya: all hours DOT. Weekday: first 8 hrs normal, rest OT.
+// Saturday: first 5 hrs normal (8 am–1 pm), rest OT — same rule as the
+// attendance tracker. A Saturday of 18+ hrs has run past midnight into
+// Sunday, so hours beyond 18 are DOT (5 normal + 13 OT + remainder DOT).
 function splitDayHours(date, hours) {
-  const R = EMPLOYMENT_RATES, N = R.NORMAL_DAY_HRS;
+  const R = EMPLOYMENT_RATES;
   if(hours <= 0) return { normal:0, ot:0, dot:0 };
   if(isSundayOrPoya(date)) return { normal:0, ot:0, dot:hours };
   const isSaturday = new Date(date + 'T00:00:00').getDay() === 6;
+  const N = isSaturday ? R.SATURDAY_NORMAL_HRS : R.NORMAL_DAY_HRS;
   if(isSaturday && hours >= 18) return { normal:N, ot:18 - N, dot:hours - 18 };
   if(hours > N) return { normal:N, ot:hours - N, dot:0 };
   return { normal:hours, ot:0, dot:0 };
@@ -1388,6 +1438,11 @@ function calcDailyCost(role, hours, date) {
 }
 
 let charts={}, allocData=null, engData=[], elecDaily=[], elecBill=[], capexData=[], prodData=[], prodDataFull=[], prodSources={};
+// Raw, unfiltered CSV rows (full sheet, no date-range slicing) — captured in
+// connectAll() and used by computePeriodCostsForKPIs() to independently
+// recompute costs for the "last month" comparison, since engData/elecDaily/
+// allocData above are already narrowed to the currently-selected date range.
+let rawLabRows=[], rawEngRows=[], rawElecDRows=[], rawAttendDaily=[], rawAttendHist=[];
 let hrLineManualOverride=false; // true once the user manually changes the Hourly Rates section's own line dropdown
 const PROMO_LINE = 'PARL'; // Promo/Rework line — repacks already-produced FG; excluded from kg, cost tracked separately
 
@@ -1421,7 +1476,7 @@ const fmt=n=>{if(!isFinite(n))return'–';if(n>=1e6)return'LKR '+(n/1e6).toFixed
 const fmtF=n=>'LKR '+Math.round(n).toLocaleString('en-US');
 const fmtKg=n=>n>0?'LKR '+(n).toFixed(2)+'/kg':'–';
 const nowStr=()=>new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-const toInputDate=d=>d.toISOString().slice(0,10);
+const toInputDate=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; // local date parts — toISOString() shifts a day back in UTC+5:30
 const pct=(a,b)=>b>0?(a/b*100).toFixed(1):'0.0';
 
 // ── QUICK DATES ───────────────────────────────────────────────────────────────
@@ -1766,6 +1821,12 @@ async function connectAll(){
     return;
   }
 
+  // Stash raw, unfiltered rows (full sheet) for the "last month" comparison —
+  // engData/elecDaily/allocData below are narrowed to the selected range, so
+  // computing a different (previous-month) period needs the unfiltered source.
+  rawLabRows = labRows; rawEngRows = engRows; rawElecDRows = elecDRows;
+  rawAttendDaily = attendDailyRows; rawAttendHist = attendHistRows;
+
   // Parse labour allocation CSV, merging in attendance-verified OT/DOT
   // (Labor Attendance Tracker) for dates from OT_ATTENDANCE_CUTOVER onward.
   if(labRows.length > 0) {
@@ -1961,11 +2022,18 @@ function getProdActuals(from, to) {
 
   const sf = v => { try { return parseFloat(String(v).replace(/,/g,''))||0; } catch(e){ return 0; }};
 
-  // Batch lines excluded from volume (but included in cost)
-  // PARL = Promo/Rework line — repacks already-produced FG into promo packs,
-  // so its kg is not new production and must not double-count Total Kg Produced.
-  // Its labour cost is still tracked, but broken out separately (see calcCosts).
-  const BATCH_LINES = ['DPML','LBML','CRWL','PRL','FGL','PCL','AFPL','BPL','CPL','PARL'];
+  // Batch lines excluded from volume (but included in cost) — uses the same
+  // canonical BATCH_LINE_CODES set as every other section (Production DB row
+  // filter, OEE, Output Efficiency) so this can't drift out of sync again.
+  // FIX (Aug 2026): this used to be a separate hardcoded array that had
+  // wrongly picked up AFPL/BPL/CPL (Air Freshener, Bleaching Powder, Cleaning
+  // Powder — all real MANUAL packing lines, not batch/WIP or promo/rework),
+  // which silently zeroed their kg/CS out of Total kg Produced, Total CS and
+  // Output Efficiency while still counting their labour hours — understating
+  // total tonnage and overstating cost-per-kg. Confirmed with HOM: only
+  // DPML/LBML/CRWL/PRL/FGL/PCL (batch/WIP stage) and PARL (promo/rework,
+  // already counted once in FG qty) should be excluded from volume.
+  const BATCH_LINES = [...BATCH_LINE_CODES];
 
   const lineAgg = {}, dailyAgg = {}, productAgg = {};
   let totalKg = 0, totalCS = 0, totalRunHrs = 0, totalLabHrs = 0;
@@ -2324,9 +2392,232 @@ function calcCosts(from,to){
   };
 }
 
+// ── MONTH-OVER-MONTH COMPARISON ─────────────────────────────────────────────
+// Always resolves to the full prior calendar month relative to the selected
+// "Date To" (e.g. Aug 1–31 filter → compares to Jul 1–31), regardless of the
+// exact "Date From" chosen, so the reference point doesn't shift every time
+// the range is narrowed — matches HOM's "same period last month" ask.
+function getPrevMonthRange(toStr){
+  const d = toStr ? new Date(toStr+'T00:00:00') : new Date();
+  const y = d.getFullYear(), m = d.getMonth();
+  const pFrom = new Date(y, m-1, 1);
+  const pTo   = new Date(y, m, 0); // day 0 of this month = last day of prev month
+  // Format from LOCAL date parts — toISOString() converts to UTC, which in
+  // Sri Lanka (UTC+5:30) shifts local midnight back a day (gave 30 Apr–30 May
+  // instead of 1–31 May).
+  const iso = dd => `${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}`;
+  return { from: iso(pFrom), to: iso(pTo) };
+}
+
+// Recomputes the same cost aggregates as calcCosts()/renderLabour() but for
+// an arbitrary range (used for the previous-month reference), pulling from
+// the raw unfiltered CSV rows captured in connectAll() — NOT from
+// engData/elecDaily/allocData, which are already narrowed to whatever range
+// is currently selected in the date filters. Respects the Production Line
+// filter the same way getFilteredEng()/getFilteredElec()/getFilteredLabour() do.
+let _prevPeriodCache = { key:'', data:null };
+function computePeriodCostsForKPIs(from,to){
+  const lf = getLineFilter();
+  const key = from+'|'+to+'|'+lf+'|'+rawLabRows.length+'|'+rawEngRows.length+'|'+rawElecDRows.length+'|'+elecBill.length+'|'+rawAttendDaily.length+'|'+rawAttendHist.length;
+  if(_prevPeriodCache.key===key) return _prevPeriodCache.data;
+
+  const nameFor = code => (LM[code]||code).toLowerCase();
+  const lineMatches = area => {
+    if(lf==='all') return true;
+    const a = String(area).toLowerCase(), name = nameFor(lf);
+    return a.includes(name) || a.includes(lf.toLowerCase());
+  };
+
+  // Maintenance
+  let maintCost=0, maintFactory=0, maintMachinery=0, maintPreventive=0, maintBreakdown=0;
+  if(rawEngRows.length>0){
+    filterByDate(rawEngRows,'date',from,to).forEach(r=>{
+      const area = r['line__area']||r['line_area']||r['line___area']||'';
+      if(!lineMatches(area)) return;
+      const amt = parseFloat(String(r['amount_lkr']||r['amount']||'0').replace(/[^0-9.]/g,''))||0;
+      maintCost += amt;
+      const ct=String(r['cost_type']||'').toLowerCase();
+      const st=String(r['subtype']||r['sub_type']||'').toLowerCase();
+      if(ct.includes('factory'))maintFactory+=amt;
+      if(ct.includes('machinery'))maintMachinery+=amt;
+      if(st.includes('prevent'))maintPreventive+=amt;
+      if(st.includes('break')||st.includes('correct'))maintBreakdown+=amt;
+    });
+  }
+
+  // Electricity — KWh (line-filtered) + bill cost matched by month overlap
+  let elecKwh=0;
+  if(rawElecDRows.length>0){
+    filterByDate(rawElecDRows,'date',from,to).forEach(r=>{
+      const area = r['factory_area']||r['area']||'';
+      if(!lineMatches(area)) return;
+      elecKwh += parseFloat(r['kwh_consumed']||0)||0;
+    });
+  }
+  const MONTH_MAP={'january':1,'february':2,'march':3,'april':4,'may':5,'june':6,
+    'july':7,'august':8,'september':9,'october':10,'november':11,'december':12};
+  let elecCost=0;
+  const fromDate=new Date(from), toDate=new Date(to);
+  if(elecBill.length>0){
+    elecBill.forEach(r=>{
+      const mName=String(r['month']||'').toLowerCase().trim();
+      const yr=parseInt(r['year'])||0;
+      const mNum=MONTH_MAP[mName]||0;
+      if(!mNum||!yr) return;
+      const billStart=new Date(yr,mNum-1,1), billEnd=new Date(yr,mNum,0);
+      if(billEnd>=fromDate && billStart<=toDate){
+        elecCost += parseFloat(String(r['total_bill_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+      }
+    });
+  }
+  if(elecCost===0 && elecKwh>0 && elecBill.length>0){
+    const lastBill=elecBill[elecBill.length-1];
+    const rate=parseFloat(String(lastBill['rate_per_kwh_lkr']||'0').replace(/[^0-9.]/g,''))||0;
+    if(rate>0) elecCost = elecKwh*rate;
+  }
+
+  // Labour — reparse raw rows for this range (mirrors connectAll's own
+  // allocData = parseLabourCSV(labRows, from, to), so the OT/DOT split for
+  // the comparison period is computed the exact same way as the live one).
+  let labourCostAll=0, promoCost=0, otBreakdown=null, filesFound=0;
+  if(rawLabRows.length>0){
+    const alloc = parseLabourCSV(rawLabRows, from, to, parseAttendanceOT(rawAttendDaily, rawAttendHist, from, to));
+    filesFound = alloc.filesFound;
+    otBreakdown = alloc.otBreakdown;
+    if(lf==='all'){
+      labourCostAll = alloc.totalCost;
+    } else {
+      const name = nameFor(lf);
+      Object.entries(alloc.lineTotals||{}).forEach(([line,val])=>{
+        const l=String(line).toLowerCase();
+        if(l.includes(name)||name.includes(l)||l.includes(lf.toLowerCase())) labourCostAll += val.cost||0;
+      });
+    }
+    Object.entries(alloc.lineTotals||{}).forEach(([line,val])=>{
+      const l=String(line).toLowerCase();
+      const isPromo = l===PROMO_LINE.toLowerCase() || (l.includes('promo')&&l.includes('rework'));
+      if(!isPromo) return;
+      if(lf!=='all'){
+        const name=nameFor(lf);
+        if(!(l.includes(name)||name.includes(l)||l.includes(lf.toLowerCase()))) return;
+      }
+      promoCost += val.cost||0;
+    });
+  }
+  const labourCost = Math.max(0, labourCostAll - promoCost);
+
+  const result = {
+    labourCost, promoCost, labourCostAll, maintCost, maintFactory, maintMachinery, maintPreventive, maintBreakdown, elecCost, elecKwh,
+    totalCost: labourCostAll + maintCost + elecCost,
+    otBreakdown, filesFound,
+  };
+  _prevPeriodCache = { key, data: result };
+  return result;
+}
+
+// Compact "vs last month" line rendered inside a KPI/stream card. Shows the
+// prior period's absolute value plus a +/- % badge (red=up/worse for a cost
+// metric, green=down/better), so HOM can see at a glance how the current
+// period is pacing before it closes.
+function momLine(label, curVal, prevVal){
+  curVal = curVal||0; prevVal = prevVal||0;
+  if(curVal===0 && prevVal===0){
+    return `<div class="kmom">${label}: <b>–</b> <span class="kmom-badge flat">No data</span></div>`;
+  }
+  const diff = curVal - prevVal;
+  const pct  = prevVal>0 ? (diff/prevVal*100) : 100;
+  const flat = Math.abs(pct) < 0.5;
+  const cls  = flat ? 'flat' : (diff>0 ? 'up' : 'dn');
+  const arrow= flat ? '≈' : (diff>0 ? '▲' : '▼');
+  const sign = diff>0 ? '+' : '';
+  return `<div class="kmom">${label}: <b>${fmt(prevVal)}</b> <span class="kmom-badge ${cls}">${arrow} ${sign}${pct.toFixed(1)}%</span></div>`;
+}
+
+// ── FG OUTPUT QTY (Packing/Finishing lines only) ────────────────────────────
+// Per HOM (Aug 2026): all lines recorded in the Production Database's "Manual
+// Line" sheet are direct Finished-Goods output — that sheet only ever
+// contains packing/finishing lines to begin with (batch/mixing-stage tonnage
+// lives in the separate Batch Production Master sheet and is tracked as WIP
+// in the WIP Inventory module, not here). PARL (Promotion/Rework) is still
+// excluded — its kg was already counted once when the original FG was first
+// produced, so including it again would double-count tonnage.
+//
+// FIX (Aug 2026): products that pass through more than one process stage on
+// the same line/day (e.g. Filling then Packing, or Counting then Packing)
+// get a separate Production DB row per stage, and — confirmed with HOM —
+// the kg logged at each stage for the same date+line+product is always
+// identical (the same physical goods re-checkpointed, not additional
+// output). Summing every row therefore double-counted those products. Now:
+// group by date+line+product, and if a "Packing" row exists for that group,
+// count ONLY the Packing row(s) — earlier-stage rows (Filling/Counting/
+// Wrapping/etc.) for that same group are dropped as checkpoints of the same
+// goods. If no Packing row exists for a group (e.g. DPPL/LPSL only ever log
+// "Wrapping", DFL only logs "Finishing"), keep whatever single stage is
+// there, since that's the only stage recorded for that product/process.
+//
+// This is deliberately computed standalone from prodDataFull (the raw,
+// unfiltered Production DB rows) rather than reused from calcCosts()/
+// getProdActuals(), so it never falls back to the embedded historical
+// SD.daily_totals data the way the main Total kg Produced figure can — it's
+// meant to be a literal "what does the Production DB show" number.
+function computeFGOutputQty(from,to){
+  if(!prodDataFull || prodDataFull.length===0) return null;
+  const lf = getLineFilter();
+  const groups = {};
+  prodDataFull.forEach(r=>{
+    if(!r.date || r.date<from || r.date>to) return;
+    if(BATCH_LINE_CODES.has(r.line)) return; // excludes PARL + any batch/WIP-stage codes
+    if(lf!=='all' && r.line!==lf) return;
+    const key = r.date+'|'+r.line+'|'+String(r.product_sku||'').trim();
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  });
+  let kg=0; const days=new Set();
+  Object.values(groups).forEach(rowsInGroup=>{
+    const packingRows = rowsInGroup.filter(r=>String(r.stage||'').toLowerCase().includes('pack'));
+    const useRows = packingRows.length>0 ? packingRows : rowsInGroup;
+    useRows.forEach(r=>{
+      const v = parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0;
+      kg += v;
+      days.add(r.date);
+    });
+  });
+  return { kg, days: days.size };
+}
+
+// ── BATCH MIXING QTY (Batch Production Master, period throughput) ──────────
+// Per HOM (Aug 2026): batch/mixing-stage tonnage (noodles, shaped WIP, powder
+// mixing etc. — recorded in the Batch Production Master sheet) is real
+// production that consumed labour hours, and belongs in "Total kg Produced"
+// alongside FG output — even though the same physical material is often
+// counted again downstream when it becomes packed FG. That's intentional:
+// this is a gross throughput figure (tonnage processed at every stage that
+// touched labour), not a net physical-output figure. It is a PERIOD total
+// (produced within from–to), unlike buildWIPBalances()'s running stock
+// balance, which is always "as of" a single date.
+function computeBatchMixingQty(from,to){
+  if(!batchRows || batchRows.length===0) return null;
+  const lf = getLineFilter();
+  let kg=0; const days=new Set();
+  batchRows.forEach(r=>{
+    if(!r.date || r.date<from || r.date>to) return;
+    if(lf!=='all' && r.line!==lf) return;
+    kg += r.weight||0;
+    days.add(r.date);
+  });
+  return { kg, days: days.size };
+}
+
 // ── RENDER UNIT COST SUMMARY ──────────────────────────────────────────────────
 // (unit-cost-card removed from layout; per-kg figures shown in KPI card badges)
 function renderUnitCost(c){ /* no-op */ }
+
+// Plain supplementary fact line inside a KPI card — visually matches momLine
+// (dashed divider) but without the variance badge, for a value that's just
+// informational rather than a period-over-period comparison.
+function infoLine(label, value){
+  return `<div class="kmom">${label}: <b>${value}</b></div>`;
+}
 
 // ── RENDER KPIs ───────────────────────────────────────────────────────────────
 function renderKPIs(rows,c){
@@ -2335,15 +2626,41 @@ function renderKPIs(rows,c){
   const eff=pp>0?(pa/pp*100).toFixed(1):0;
   const labourCostAll = c.labourCost + c.promoCost; // production + promo combined
   const flt = getFilteredLabour();
+
+  // Last-month reference (full prior calendar month vs the current "Date To")
+  const prevRange = getPrevMonthRange(($('f-to')||{}).value);
+  const cPrev = computePeriodCostsForKPIs(prevRange.from, prevRange.to);
+  const momLbl = `Last month (${prevRange.from} to ${prevRange.to})`;
+
+  // Total kg Produced = batch/mixing-stage throughput + FG output — both
+  // count because labour was applied at each stage (per HOM, Aug 2026).
+  // FG Output Qty stays the smaller, packing/finishing-only sub-figure.
+  // NOTE: this combined figure is for THIS display card only — it does not
+  // feed cost-per-kg (c.totalPerKg / labPerKg / elecPerKg above), which stay
+  // on the existing FG-only basis so no cost metric shifts as a side effect.
+  const kgFrom = ($('f-from')||{}).value, kgTo = ($('f-to')||{}).value;
+  const fgOut   = computeFGOutputQty(kgFrom, kgTo);
+  const batchQty= computeBatchMixingQty(kgFrom, kgTo);
+  const fgKg    = fgOut ? fgOut.kg : 0;
+  const batchKg = batchQty ? batchQty.kg : 0;
+  const grandKg = fgKg + batchKg;
+
   const kpis=[
-    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
-    {c:'blue',l:'Labour Cost',v:fmt(labourCostAll),s:flt&&flt.totalHours>0?`${flt.employees} employees · ${flt.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:labourCostAll>0?`Production: ${fmt(c.labourCost)} · Promo/Rework: ${fmt(c.promoCost)}`:'–',bt:'neu'},
-    {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
-    {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
+    {c:'gold',l:'Total Cost (All Streams)',v:fmt(c.totalCost),curRaw:c.totalCost,prevRaw:cPrev.totalCost,s:c.totalCost>0?'Labour + Promo/Rework + Maintenance + Electricity':'Connect data sources',b:c.totalCost>0?fmtKg(c.totalPerKg)+' per kg':'–',bt:'neu'},
+    {c:'blue',l:'Labour Cost',v:fmt(labourCostAll),curRaw:labourCostAll,prevRaw:cPrev.labourCostAll,s:flt&&flt.totalHours>0?`${flt.employees} employees · ${flt.totalHours.toFixed(1)} hrs`:'No labour data for this range',b:labourCostAll>0?`Production: ${fmt(c.labourCost)} · Promo/Rework: ${fmt(c.promoCost)}`:'–',bt:'neu'},
+    {c:'red', l:'Maintenance Cost',v:fmt(c.maintCost),curRaw:c.maintCost,prevRaw:cPrev.maintCost,s:engData.length>0?`${engData.length} entries · ${Object.keys([...new Set(engData.map(r=>r['line_area']))]).length} areas`:'No data connected',b:engData.length>0?`Factory: ${fmt(c.maintFactory)} · Machinery: ${fmt(c.maintMachinery)}`:'–',bt:'neu'},
+    {c:'amber',l:'Electricity Cost',v:fmt(c.elecCost),curRaw:c.elecCost,prevRaw:cPrev.elecCost,s:elecDaily.length>0?`${c.elecKwh.toFixed(0)} KWh consumed`:'No data connected',b:c.totalKg>0&&c.elecKwh>0?`${(c.elecKwh/c.totalKg).toFixed(3)} KWh/kg`:'–',bt:'neu'},
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
-    {c:'green',l:'Total kg Produced',v:c.totalKg>0?Math.round(c.totalKg).toLocaleString()+' kg':'–',s:'From Production Database (excl. promo repack)',b:c.totalKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu'},
+    {c:'green',l:'Total kg Produced (Mixing + FG)',v:grandKg>0?Math.round(grandKg).toLocaleString()+' kg':'–',s:'Batch/mixing stage + packing/finishing output combined',b:grandKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu',extraHtml:grandKg>0?(
+      infoLine('Batch Mixing Qty (Batch Production Master)', Math.round(batchKg).toLocaleString()+' kg') +
+      infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fgKg).toLocaleString()+' kg')
+    ):''},
   ];
-  const kpiHtml = kpis.map(k=>`<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div></div>`).join('');
+  const kpiHtml = kpis.map(k=>{
+    const mom = (k.curRaw!==undefined) ? momLine(momLbl,k.curRaw,k.prevRaw) : '';
+    const extra = k.extraHtml || '';
+    return `<div class="kpi ${k.c}"><div class="klbl">${k.l}</div><div class="kval">${k.v}</div><div class="ksub">${k.s}&nbsp;<span class="badge ${k.bt}">${k.b}</span></div>${mom}${extra}</div>`;
+  }).join('');
   // OEE card — placeholder here, content filled in by renderOEE() (which runs
   // after renderKPIs in renderAll and needs Production DB + Quality Rejects
   // data already loaded). Highest-OEE tier shown as the primary value; the
@@ -2529,11 +2846,21 @@ function renderLabour(c){
       ? ` · attendance-verified from ${OT_ATTENDANCE_CUTOVER}`
       : '';
 
+    // Last-month reference for each stream (same full-prior-calendar-month
+    // rule as the top KPI board — see getPrevMonthRange).
+    const prevRangeL = getPrevMonthRange(($('f-to')||{}).value);
+    const cPrevL = computePeriodCostsForKPIs(prevRangeL.from, prevRangeL.to);
+    const otbPrev = cPrevL.otBreakdown || { normalHours:0, otHours:0, dotHours:0, normalCost:0, otCost:0, dotCost:0 };
+    // Matches labTotal above (= allocData.totalCost), not the OT-tier sum,
+    // since that's the basis "Total Labour Cost" actually displays.
+    const prevLabTotal = cPrevL.labourCostAll;
+    const momLblL = `Last month (${prevRangeL.from} to ${prevRangeL.to})`;
+
     $('labour-kpis').innerHTML=`
-      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs × ${lkr(R.normalHr)}/hr · ${src}</div></div>
-      <div class="stream-card maint"><div class="klbl">Overtime Cost</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 8hrs/day × ${lkr(R.otHr)}/hr${otSrcNote}</div></div>
-      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h × ${lkr(R.dotHr)}/hr${otSrcNote}</div></div>
-      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · normal + OT + DOT costed separately</div></div>`;
+      <div class="stream-card labour"><div class="klbl">Normal Hours Cost</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div><div class="ksub">${otb.normalHours.toFixed(1)} hrs × ${lkr(R.normalHr)}/hr · ${src}</div>${momLine(momLblL,otb.normalCost,otbPrev.normalCost)}</div>
+      <div class="stream-card maint"><div class="klbl">Overtime Cost</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div><div class="ksub">${otb.otHours.toFixed(1)} hrs above 8 hrs/day (Sat: after 5 hrs) × ${lkr(R.otHr)}/hr${otSrcNote}</div>${momLine(momLblL,otb.otCost,otbPrev.otCost)}</div>
+      <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div><div class="ksub">${otb.dotHours.toFixed(1)} hrs on Sunday/Poya days + Saturday hrs past 18h × ${lkr(R.dotHr)}/hr${otSrcNote}</div>${momLine(momLblL,otb.dotCost,otbPrev.dotCost)}</div>
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · normal + OT + DOT costed separately</div>${momLine(momLblL,labTotal,prevLabTotal)}</div>`;
   } else {
     // No live data — show placeholder
     $('labour-kpis').innerHTML=`
@@ -2589,10 +2916,16 @@ function renderMaintenance(c){
     pmRatioStr=`${pr} : ${br}`;
   }
   const pmHealthy=_brk<=_pm;
+
+  // Last-month reference for the three type cards below
+  const prevRangeM = getPrevMonthRange(($('f-to')||{}).value);
+  const cPrevM = computePeriodCostsForKPIs(prevRangeM.from, prevRangeM.to);
+  const momLblM = `Last month (${prevRangeM.from} to ${prevRangeM.to})`;
+
   $('maint-type-cards').innerHTML=`
-    <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div></div>
-    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub" style="margin-top:4px;"><span style="font-size:11px;font-weight:700;color:${pmHealthy?'var(--teal)':'var(--red)'};">PM : BRK &nbsp;${pmRatioStr}</span></div><div class="maint-type-sub" style="margin-top:3px;">${pmHealthy?'✓ PM ratio healthy':'⚠ Breakdown > Preventive'}</div></div>`;
+    <div class="maint-type-card"><div class="maint-type-label">Factory Maintenance</div><div class="maint-type-val">${fmt(c.maintFactory)}</div><div class="maint-type-sub">Building & facility repairs</div>${momLine(momLblM,c.maintFactory,cPrevM.maintFactory)}</div>
+    <div class="maint-type-card"><div class="maint-type-label">Machinery Maintenance</div><div class="maint-type-val">${fmt(c.maintMachinery)}</div><div class="maint-type-sub">Equipment service & repair</div>${momLine(momLblM,c.maintMachinery,cPrevM.maintMachinery)}</div>
+    <div class="maint-type-card"><div class="maint-type-label">Preventive vs Breakdown</div><div class="maint-type-val" style="font-size:14px;">${fmt(c.maintPreventive)} <span style="color:var(--text3);font-size:12px;">PM</span> / ${fmt(c.maintBreakdown)} <span style="color:var(--text3);font-size:12px;">BRK</span></div><div class="maint-type-sub" style="margin-top:4px;"><span style="font-size:11px;font-weight:700;color:${pmHealthy?'var(--teal)':'var(--red)'};">PM : BRK &nbsp;${pmRatioStr}</span></div><div class="maint-type-sub" style="margin-top:3px;">${pmHealthy?'✓ PM ratio healthy':'⚠ Breakdown > Preventive'}</div>${momLine(momLblM,c.maintPreventive+c.maintBreakdown,cPrevM.maintPreventive+cPrevM.maintBreakdown)}</div>`;
 
   const filteredEngData = getFilteredEng();
 
