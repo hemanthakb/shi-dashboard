@@ -362,6 +362,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <option value="capex">Capital Expenditure</option>
       <option value="hourly">Hourly Labour Cost</option>
       <option value="production">Production Database</option>
+      <option value="capacity">Line Capacity Utilisation</option>
       <option value="wip">WIP Inventory</option>
     </select>
     <button class="btn btn-blue no-print" onclick="printSection()">🖨 Print</button>
@@ -567,6 +568,31 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
         <th style="text-align:left">Classification</th><th style="text-align:left">Notes</th>
       </tr></thead>
       <tbody id="oee-rejects-tbody"></tbody>
+    </table></div>
+  </div>
+  </div>
+
+  <!-- ── LINE CAPACITY UTILISATION ───────────────────────────────────────── -->
+  <div data-print-section="capacity" style="display:contents">
+  <div class="section-title">Line Capacity Utilisation <span class="section-tag" id="cap-tag" style="background:var(--teal-lt);color:var(--teal)">OEM speed · 26 days/month</span></div>
+  <div class="no-print" style="display:flex;align-items:center;gap:8px;margin:-4px 0 12px;font-size:11px;color:var(--text3);">
+    <span style="font-weight:700;text-transform:uppercase;letter-spacing:.6px;font-size:10px;">Capacity scenario:</span>
+    <button class="btn cap-sc" data-shifts="1" onclick="setCapShifts(1)">1 shift (normal)</button>
+    <button class="btn cap-sc" data-shifts="2" onclick="setCapShifts(2)">2 shifts (maximum)</button>
+    <span id="cap-sc-note" style="margin-left:6px;"></span>
+  </div>
+  <div class="maint-type-grid" id="cap-cards" style="grid-template-columns:repeat(4,1fr);"></div>
+  <div class="tcard" style="margin-bottom:18px;">
+    <div class="thead"><div><div class="ct">Capacity vs Actual by Line</div><div class="cs" id="cap-sub"></div></div></div>
+    <div class="tscroll" style="max-height:420px;"><table class="tcompact">
+      <thead><tr>
+        <th style="text-align:left">Code</th><th style="text-align:left">Line</th><th>Days run</th>
+        <th>Capacity hrs (to date)</th><th>Run hrs</th><th>Output CS</th><th>Earned std hrs</th>
+        <th>Loading<br>(run ÷ capacity)</th><th>Efficiency<br>(output vs OEM speed)</th>
+        <th style="background:var(--teal-lt);color:var(--teal)">Utilisation to date</th><th>Utilisation of month</th>
+      </tr></thead>
+      <tbody id="cap-tbody"></tbody>
+      <tfoot id="cap-tfoot"></tfoot>
     </table></div>
   </div>
   </div>
@@ -1390,9 +1416,11 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
 // Loaded from sources sheet CSV via prodSrc URL — updated automatically
 // Format: { 'Product Name|Stage': { headcount, csPerHr, line, kgPerCS } }
 let PROD_STANDARDS = {};  // populated from sources sheet on connect
+let PROD_STAGE_RATES = {}; // 'product|stage' (lower-case) -> OEM CS/hr, for capacity utilisation
 
 function buildProdStandards(srcRows) {
   PROD_STANDARDS = {};
+  PROD_STAGE_RATES = {};
   if(!srcRows || srcRows.length === 0) return;
   
   console.log('srcRows count:', srcRows.length);
@@ -1430,6 +1458,7 @@ function buildProdStandards(srcRows) {
 
     if(!grouped[product]) grouped[product] = [];
     grouped[product].push({ stage, headcount, csPerHr, kgPerCS, line });
+    if(csPerHr > 0) PROD_STAGE_RATES[product.toLowerCase()+'|'+stage.toLowerCase()] = csPerHr;
   });
 
   // Pass 2: combine stages into one standard per product. Total labour cost
@@ -1977,7 +2006,10 @@ async function connectAll(){
         if(!dateVal && (/^20[0-9]{2}-[0-9]{2}-[0-9]{2}/.test(v) || /^[0-9]{1,2}\/[0-9]{1,2}\/20[0-9]{2}/.test(v))) {
           dateVal=normaliseDate(v, 'MD'); // Production DB: real Excel Date cells export as M/D/YYYY
         }
-        if(!lineVal && /^[A-Z]{2,6}$/.test(v) && v!=='DAY'&&v!=='OEE') lineVal=v;
+        // Shift values (DAY / NIGHT) are also short capitals — never treat them as
+        // a line code. (FIX 24 Sep 2026: "NIGHT" was being taken as the line,
+        // silently dropping every night-shift row from all Production DB figures.)
+        if(!lineVal && /^[A-Z]{2,6}$/.test(v) && !['DAY','NIGHT','OEE'].includes(v)) lineVal=v;
       }
       // Product and stage are typically after line code
       const keys = Object.keys(r);
@@ -1996,7 +2028,12 @@ async function connectAll(){
       // ChangeOver/Production/Labor/Material Problem) — summed per row per
       // decision #5: only explicitly-logged downtime counts against
       // Availability; unlogged gaps are "No Plan" and excluded entirely.
-      const breakdownMin =
+      // The sheet's own "Breack Down Time (Min)" total column is used when
+      // present — the per-reason columns sit under a merged header row that the
+      // CSV export flattens to blank headers, so they can't be found by name
+      // (FIX 24 Sep 2026: logged downtime was being read as 0 everywhere).
+      const bdTotal = findCol(r,['breack_down_time','break_down_time','breakdown_time']);
+      const breakdownMin = (bdTotal!==undefined && String(bdTotal).trim()!=='') ? sf(bdTotal) :
         sf(findCol(r,['machine_problem','machine problem'])) +
         sf(findCol(r,['quilty_problem','quality_problem','quilty problem','quality problem'])) +
         sf(findCol(r,['ware_house_problem','warehouse_problem','ware house problem'])) +
@@ -3552,6 +3589,133 @@ function renderOeeModal(){
 }
 
 // ── RENDER OEE SECTION + KPI CARD BADGE ─────────────────────────────────────
+// ── LINE CAPACITY UTILISATION ───────────────────────────────────────────────
+// Definitions agreed with HOM (25 Sep 2026):
+//   Capacity     = available time × OEM speed. Available time per line =
+//                  2 shifts × (12 hrs − 1.25 hrs planned breaks) = 21.5 hrs/day,
+//                  Monday–Saturday, 26 working days/month (budget capacity plan).
+//   Efficiency   = actual output ÷ (hours run × OEM speed)
+//   Utilisation  = actual output ÷ capacity  (= Efficiency × Loading)
+//   Loading      = hours run ÷ capacity hours
+// Output is converted to standard (earned) hours so lines running several
+// products compare fairly: earned hrs = Σ actual CS ÷ that SKU's OEM CS/hr
+// (Production DB `sources` sheet — same speeds used for the capacity plan).
+// FG packing lines only (batch/PARL excluded). Where a product is logged at
+// more than one stage on the same day, the Packing row is used (same rule as
+// FG Output Qty) so time and output aren't double-counted.
+// shiftsPerDay is switched by the scenario buttons: 1 shift = normal operation
+// (default; extended hours show as > 100%), 2 shifts = maximum capacity.
+const CAPACITY = { shiftsPerDay:1, shiftHrs:12, plannedBreakHrs:1.25, workingDaysPerMonth:26 };
+function setCapShifts(n){ CAPACITY.shiftsPerDay = n; renderCapacity(); }
+// OEM speeds confirmed by HOM against the 2026/27 capacity plan (25 Sep 2026),
+// overriding the sources sheet until it is updated to match. DW 150g tub is
+// de-listed (125g tub = 12 CS/hr, already correct in the sources sheet).
+const OEM_SPEED_OVERRIDES = [
+  { match: /dish\s*wash\s*tub.*250\s*g/i,       csPerHr: 23  },  // DW Orange tub 250g & MY Choice tub 250g (sources: 30)
+  { match: /papaya\s*soap/i,                     csPerHr: 1.6 },  // Natura Papaya 125g (sources: 3)
+  { match: /f\/?\s*soft\s*mellow.*40\s*ml/i,    csPerHr: 20  },  // Fabric Softener 40ml sachet, four-track (sources: 18)
+];
+function capacityRate(product, stage){
+  const p = String(product||'').trim(), st = String(stage||'').trim().toLowerCase();
+  const ov = OEM_SPEED_OVERRIDES.find(o => o.match.test(p));
+  if(ov) return ov.csPerHr;
+  const r = PROD_STAGE_RATES[p.toLowerCase()+'|'+st];
+  if(r) return r;
+  const s = PROD_STANDARDS[p];
+  return s && s.csPerHr > 0 ? s.csPerHr : 0;
+}
+function calcCapacity(){
+  const to = ($('f-to')||{}).value; if(!to || !prodDataFull || !prodDataFull.length) return null;
+  const [y,m] = to.split('-').map(Number);
+  const pad = n => String(n).padStart(2,'0');
+  const monthStart = `${y}-${pad(m)}-01`;
+  const lf = getLineFilter();
+  const sf = v => { try{return parseFloat(String(v||'').replace(/,/g,''))||0;}catch(e){return 0;} };
+  const rows = prodDataFull.filter(r => r.date && r.date>=monthStart && r.date<=to && r.line &&
+                 !BATCH_LINE_CODES.has(r.line) && (lf==='all' || r.line===lf));
+  if(!rows.length) return { monthStart, to, lines:[], noData:true };
+  const tillDate = rows.reduce((mx,r)=> r.date>mx ? r.date : mx, monthStart);
+  // Mon–Sat days elapsed (capped at the month's 26 working days)
+  let daysElapsed = 0;
+  for(let d = new Date(monthStart+'T00:00:00'); ; d.setDate(d.getDate()+1)){
+    const iso = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    if(iso > tillDate) break;
+    if(d.getDay() !== 0) daysElapsed++;
+  }
+  daysElapsed = Math.min(daysElapsed, CAPACITY.workingDaysPerMonth);
+  const hrsPerDay = CAPACITY.shiftsPerDay * (CAPACITY.shiftHrs - CAPACITY.plannedBreakHrs);
+  const capToDate = daysElapsed * hrsPerDay;
+  const capMonth  = CAPACITY.workingDaysPerMonth * hrsPerDay;
+
+  const groups = {};
+  rows.forEach(r => { const k = r.date+'|'+r.line+'|'+String(r.product_sku||'').trim(); (groups[k]=groups[k]||[]).push(r); });
+  const agg = {};
+  Object.values(groups).forEach(g => {
+    const pack = g.filter(r => String(r.stage||'').toLowerCase().includes('pack'));
+    (pack.length ? pack : g).forEach(r => {
+      const a = agg[r.line] = agg[r.line] || { runHrs:0, cs:0, earned:0, noStdCS:0, days:new Set() };
+      const cs = sf(r.actual_out_put_cs), rate = capacityRate(r.product_sku, r.stage);
+      a.runHrs += r.run_time_hr||0; a.cs += cs; a.days.add(r.date);
+      if(rate>0) a.earned += cs/rate; else a.noStdCS += cs;
+    });
+  });
+  const lines = Object.entries(agg).map(([code,a]) => ({
+    code, name: lname(code), days: a.days.size, runHrs: a.runHrs, cs: a.cs, earned: a.earned, noStdCS: a.noStdCS,
+    capToDate, capMonth,
+    loading: capToDate>0 ? a.runHrs/capToDate : 0,
+    efficiency: a.runHrs>0 ? a.earned/a.runHrs : 0,
+    utilToDate: capToDate>0 ? a.earned/capToDate : 0,
+    utilMonth: capMonth>0 ? a.earned/capMonth : 0,
+  })).sort((a,b)=> b.utilToDate - a.utilToDate);
+  const T = lines.reduce((t,l)=>({runHrs:t.runHrs+l.runHrs, earned:t.earned+l.earned, cs:t.cs+l.cs, noStdCS:t.noStdCS+l.noStdCS}), {runHrs:0,earned:0,cs:0,noStdCS:0});
+  const n = lines.length;
+  return { monthStart, tillDate, daysElapsed, hrsPerDay, capToDate, capMonth, lines, n,
+    total: { ...T, capToDate: capToDate*n, capMonth: capMonth*n,
+      loading: n? T.runHrs/(capToDate*n):0, efficiency: T.runHrs>0? T.earned/T.runHrs:0,
+      utilToDate: n? T.earned/(capToDate*n):0, utilMonth: n? T.earned/(capMonth*n):0 } };
+}
+function renderCapacity(){
+  const cards=$('cap-cards'), tb=$('cap-tbody'), tf=$('cap-tfoot'), sub=$('cap-sub');
+  if(!cards||!tb) return;
+  document.querySelectorAll('.cap-sc').forEach(b => {
+    const on = +b.dataset.shifts === CAPACITY.shiftsPerDay;
+    b.className = 'btn cap-sc' + (on ? ' btn-blue' : '');
+  });
+  const tag = $('cap-tag');
+  if(tag) tag.textContent = `OEM speed · ${CAPACITY.shiftsPerDay} shift${CAPACITY.shiftsPerDay>1?'s':''} × ${CAPACITY.shiftHrs - CAPACITY.plannedBreakHrs} hrs · ${CAPACITY.workingDaysPerMonth} days/month`;
+  const scn = $('cap-sc-note');
+  if(scn) scn.textContent = CAPACITY.shiftsPerDay===1
+    ? 'Normal one-shift capacity — over 100% means the line worked extended hours beyond the shift.'
+    : 'Maximum two-shift capacity (day + night).';
+  const c = calcCapacity();
+  const pct = v => (v*100).toFixed(1)+'%';
+  const over = v => v > 1 ? ` <span style="color:var(--green);font-weight:700" title="Beyond ${CAPACITY.shiftsPerDay}-shift capacity — extended hours">▲</span>` : '';
+  const fmtD = d => d ? d.slice(8,10)+'/'+d.slice(5,7) : '';
+  if(!c || c.noData || !c.lines.length){
+    cards.innerHTML = '<div style="padding:12px;color:var(--text3);font-size:12px;grid-column:1/-1">No Production DB output for this month/line yet.</div>';
+    tb.innerHTML=''; if(tf) tf.innerHTML=''; if(sub) sub.textContent=''; return;
+  }
+  const T = c.total;
+  const monthName = new Date(c.monthStart+'T00:00:00').toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  cards.innerHTML = `
+    <div class="maint-type-card" style="border-left:4px solid var(--teal)"><div class="maint-type-label">Utilisation to date</div><div class="maint-type-val" style="color:var(--teal)">${pct(T.utilToDate)}</div><div class="maint-type-sub">${Math.round(T.earned).toLocaleString()} earned std hrs of ${Math.round(T.capToDate).toLocaleString()} capacity hrs</div></div>
+    <div class="maint-type-card" style="border-left:4px solid var(--blue)"><div class="maint-type-label">Efficiency (vs OEM speed)</div><div class="maint-type-val" style="color:var(--blue)">${pct(T.efficiency)}</div><div class="maint-type-sub">Output while running ÷ OEM speed</div></div>
+    <div class="maint-type-card" style="border-left:4px solid var(--amber)"><div class="maint-type-label">Loading (time used)</div><div class="maint-type-val" style="color:var(--amber)">${pct(T.loading)}</div><div class="maint-type-sub">${Math.round(T.runHrs).toLocaleString()} run hrs of ${Math.round(T.capToDate).toLocaleString()} available</div></div>
+    <div class="maint-type-card" style="border-left:4px solid var(--purple)"><div class="maint-type-label">Utilisation of ${monthName} capacity</div><div class="maint-type-val" style="color:var(--purple)">${pct(T.utilMonth)}</div><div class="maint-type-sub">So far, against the full month (${CAPACITY.workingDaysPerMonth} days)</div></div>`;
+  if(sub) sub.textContent = `${monthName} · to ${fmtD(c.tillDate)} · ${c.daysElapsed} of ${CAPACITY.workingDaysPerMonth} working days · ${c.hrsPerDay} hrs/day per line (${CAPACITY.shiftsPerDay} shift${CAPACITY.shiftsPerDay>1?'s':''} × (${CAPACITY.shiftHrs} hrs − ${CAPACITY.plannedBreakHrs} hrs breaks)) · ${c.n} lines with output`
+    + (T.noStdCS>0 ? ` · ⚠ ${Math.round(T.noStdCS).toLocaleString()} CS without an OEM speed in the sources sheet (not counted)` : '');
+  const bar = (v,col) => `<div class="pb"><div class="pbt"><div class="pbf" style="width:${Math.min(v*100,100)}%;background:${col}"></div></div><span class="pcp">${pct(v)}${over(v)}</span></div>`;
+  tb.innerHTML = c.lines.map(l=>`<tr>
+      <td style="text-align:left">${l.code}</td><td style="text-align:left" class="tname" title="${l.name}">${l.name}</td>
+      <td>${l.days}</td><td>${Math.round(l.capToDate).toLocaleString()}</td><td>${l.runHrs.toFixed(1)}</td>
+      <td>${Math.round(l.cs).toLocaleString()}${l.noStdCS>0?' ⚠':''}</td><td>${l.earned.toFixed(1)}</td>
+      <td>${bar(l.loading,'#e8a000')}</td><td>${bar(l.efficiency,'#1a5fa8')}</td>
+      <td style="font-weight:700">${bar(l.utilToDate,'#0d7a6b')}</td><td>${pct(l.utilMonth)}${over(l.utilMonth)}</td></tr>`).join('');
+  if(tf) tf.innerHTML = `<tr><td style="text-align:left">TOTAL</td><td style="text-align:left">${c.n} lines</td><td>–</td>
+      <td>${Math.round(T.capToDate).toLocaleString()}</td><td>${T.runHrs.toFixed(1)}</td><td>${Math.round(T.cs).toLocaleString()}</td><td>${T.earned.toFixed(1)}</td>
+      <td>${pct(T.loading)}</td><td>${pct(T.efficiency)}</td><td>${pct(T.utilToDate)}</td><td>${pct(T.utilMonth)}</td></tr>`;
+}
+
 function renderOEE(){
   const from=$('f-from').value, to=$('f-to').value;
   const data = calcOEE(from, to);
@@ -3663,7 +3827,7 @@ function populateLineFilter(){
   while(sel.options.length > 1) sel.remove(1);
   // Use live prodData lines if available, else fall back to SD.line_totals
   const lineCodes = prodData && prodData.length > 0
-    ? [...new Set(prodData.map(r=>r.line).filter(l=>l&&!/^(DAY|OEE)$/.test(l)))].sort()
+    ? [...new Set(prodData.map(r=>r.line).filter(l=>l&&!/^(DAY|NIGHT|OEE)$/.test(l)))].sort()
     : Object.keys(SD.line_totals);
   lineCodes.forEach(code=>{const o=document.createElement('option');o.value=code;o.textContent=`${code} — ${lname(code)}`;sel.appendChild(o);});
   // Restore previous selection if it still exists in the new list
@@ -3713,6 +3877,7 @@ function renderAll(){
   renderElectricity(c);
   renderCapex();
   renderOEE();
+  renderCapacity();
   renderWIP();
   updateTS();
 }
