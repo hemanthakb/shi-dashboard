@@ -205,8 +205,11 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
   canvas{max-height:150px!important;}
   .kpi,.cc,.tcard,.otc{box-shadow:none;border:1px solid #ccc;}
   .dash-layout{grid-template-columns:1fr;}
-  .alert-sidebar{position:static;max-height:none;box-shadow:none;border:1px solid #ccc;margin-bottom:14px;}
-  .alert-zone{overflow:visible;}
+  .alert-sidebar{display:none!important;}   /* alerts never printed (per HOM) */
+  #print-meta{display:block!important;}
+  /* keep each graph / card group on one page instead of splitting it */
+  .cc,.egrid,.cgrid,.stream-grid,.maint-type-grid,.kgrid,.otg,.capex-panel{break-inside:avoid;page-break-inside:avoid;}
+  .dx-mark{position:static;}
   .tscroll{max-height:none!important;overflow:visible!important;}
   .tscroll thead th{position:static;box-shadow:none;}
   .print-hide-section>*{display:none!important;}
@@ -352,7 +355,7 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <span id="countdown" style="color:var(--blue);font-weight:700;min-width:22px;display:inline-block"></span>s
     </div>
     <button class="btn btn-gold no-print" id="connect-btn" onclick="manualRefresh()" title="Refresh all data now">↻ Refresh</button>
-    <select id="print-section-sel" class="no-print" title="Choose section to print" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);cursor:pointer;height:30px;">
+    <select id="print-section-sel" class="no-print" title="Choose section to print or export" style="font-size:11px;padding:4px 8px;border:1px solid var(--border2);border-radius:var(--rs);background:#fff;color:var(--text);cursor:pointer;height:30px;">
       <option value="all">🖨 All Sections</option>
       <option value="kpi">KPI Cards</option>
       <option value="trend">Cost Trend</option>
@@ -362,10 +365,12 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
       <option value="capex">Capital Expenditure</option>
       <option value="hourly">Hourly Labour Cost</option>
       <option value="production">Production Database</option>
+      <option value="oee">OEE</option>
       <option value="capacity">Line Capacity Utilisation</option>
       <option value="wip">WIP Inventory</option>
     </select>
     <button class="btn btn-blue no-print" onclick="printSection()">🖨 Print</button>
+    <button class="btn no-print" id="export-btn" onclick="exportSection()" title="Download the selected section as an Excel report (tables, summary figures and chart data)">⬇ Export</button>
   </div>
 </div>
 
@@ -406,6 +411,9 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
 <div class="dash-layout">
 
   <div class="dash-content">
+
+  <!-- PRINT HEADER (print only) -->
+  <div id="print-meta" style="display:none;font-size:11px;color:var(--text2);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);"></div>
 
   <!-- TIMESTAMP -->
   <div style="font-size:10px;color:var(--text3);margin-bottom:14px;" id="ts"></div>
@@ -3376,9 +3384,21 @@ function renderCapex(){
 }
 
 // ── SECTION PRINT ─────────────────────────────────────────────────────────────
+function reportMeta(chosen){
+  const sel = document.getElementById('print-section-sel');
+  const secName = chosen==='all' ? 'All Sections' : ((sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : chosen);
+  const lf = getLineFilter();
+  return { secName, from: ($('f-from')||{}).value, to: ($('f-to')||{}).value,
+           line: lf==='all' ? 'All lines' : `${lf} — ${lname(lf)}`, generated: nowStr() };
+}
 function printSection(){
   const sel = document.getElementById('print-section-sel');
   const chosen = sel ? sel.value : 'all';
+  const m = reportMeta(chosen);
+  const pm = $('print-meta');
+  if(pm) pm.innerHTML = `<b>${m.secName}</b> · Period ${m.from} to ${m.to} · ${m.line} · Printed ${m.generated}`;
+  // Re-fit charts to the print layout so graphs don't come out blank/cropped
+  Object.values(charts).forEach(c => { try{ c && c.resize && c.resize(); }catch(e){} });
   if(chosen === 'all'){ window.print(); return; }
 
   // Add hide class to every section except the chosen one
@@ -3396,6 +3416,115 @@ function printSection(){
 
   // Restore everything after printing
   toRestore.forEach(function(el){ el.classList.remove('print-hide-section'); });
+}
+
+// ── EXPORT SECTION TO EXCEL ─────────────────────────────────────────────────
+// Same section selector as Print. Builds an .xlsx with:
+//   • "Summary"   — report header + every card on screen (label, value, detail)
+//   • one sheet per table in the section (numbers converted to real numbers)
+//   • one sheet per chart in the section (the data behind the graph)
+// SheetJS is loaded on first use only, so normal page loads aren't slowed.
+function loadSheetJS(){
+  if(window.XLSX) return Promise.resolve();
+  return new Promise((res,rej)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    sc.onload=()=>res(); sc.onerror=()=>rej(new Error('Could not load the Excel library'));
+    document.head.appendChild(sc);
+  });
+}
+function exportSection(){
+  const btn=$('export-btn'); const old=btn?btn.textContent:'';
+  if(btn){btn.textContent='⏳ Exporting…';btn.disabled=true;}
+  loadSheetJS().then(buildExport).catch(e=>alert('Export failed: '+e.message))
+    .finally(()=>{ if(btn){btn.textContent=old;btn.disabled=false;} });
+}
+function buildExport(){
+  const sel = $('print-section-sel');
+  const chosen = sel ? sel.value : 'all';
+  const m = reportMeta(chosen);
+  const secEls = [...document.querySelectorAll('[data-print-section]')]
+    .filter(el => chosen==='all' || el.getAttribute('data-print-section')===chosen);
+  const secLabel = key => { const o=[...(sel?sel.options:[])].find(o=>o.value===key); return o?o.text:key; };
+  const wb = XLSX.utils.book_new();
+  const used = new Set();
+  const sheetName = raw => {
+    let n = String(raw||'Sheet').replace(/[^\x20-\x7E\u00C0-\u024F—–]/g,'').replace(/[\\\/\?\*\[\]:]/g,' ').replace(/\s+/g,' ').trim().slice(0,31) || 'Sheet';
+    let base=n.slice(0,27), i=2; while(used.has(n.toLowerCase())) n = `${base} (${i++})`;
+    used.add(n.toLowerCase()); return n;
+  };
+  const toNum = v => {  // "LKR 1,234.5" / "12.3%" / "1,234 kg" → number where it's clearly numeric
+    if(typeof v!=='string') return v;
+    const t=v.replace(/ /g,' ').trim();
+    const mm=t.match(/^(?:LKR\s*)?(-?[\d,]+(?:\.\d+)?)\s*(%|kg|hrs|h|CS|K|M)?$/i);
+    if(!mm) return t;
+    let n=parseFloat(mm[1].replace(/,/g,'')); const u=(mm[2]||'').toUpperCase();
+    if(!isFinite(n)) return t;
+    if(u==='%') return { t:'n', v:n/100, z:'0.0%' };   // real % cell in Excel
+    if(u==='K') n*=1e3; else if(u==='M') n*=1e6;
+    return n;
+  };
+  const clean = el => (el ? el.innerText : '').replace(/\s*\n\s*/g,' ').trim();
+
+  // Summary sheet: header + cards
+  const summary = [['Star Holdings International — Manufacturing Cost Dashboard'],
+    ['Report', m.secName],['Period', `${m.from} to ${m.to}`],['Production line', m.line],['Generated', m.generated],[]];
+  secEls.forEach(sec=>{
+    const cards = sec.querySelectorAll('.kpi,.stream-card,.maint-type-card,.capex-stat,.elec-meter,.otg > div');
+    if(!cards.length) return;
+    summary.push([secLabel(sec.getAttribute('data-print-section'))]);
+    summary.push(['Item','Value','Detail']);
+    cards.forEach(c=>{
+      const lbl = c.querySelector('.klbl,.maint-type-label,.capex-stat-label,.meter-area,.otg-lbl');
+      const val = c.querySelector('.kval,.maint-type-val,.capex-stat-val,.meter-kwh,.otg-big,.otg-pace');
+      if(!lbl && !val) return;
+      // text without the gauge dial's scale labels (SVG)
+      const cl = c.cloneNode(true); cl.querySelectorAll('svg').forEach(x=>x.remove());
+      const all = (cl.textContent||'').replace(/\s+/g,' ').trim();
+      const lblTxt = lbl ? clean(lbl) : (c.querySelector('.otg-pace') ? 'OT used of month budget' : '');
+      const valTxt = clean(val);
+      const detail = all.replace(lbl?clean(lbl):'','').replace(valTxt,'').replace(/\s+/g,' ').trim();
+      summary.push([lblTxt, toNum(valTxt), detail]);
+    });
+    summary.push([]);
+  });
+  const ws0 = XLSX.utils.aoa_to_sheet(summary); ws0['!cols']=[{wch:38},{wch:22},{wch:90}];
+  XLSX.utils.book_append_sheet(wb, ws0, sheetName('Summary'));
+
+  secEls.forEach(sec=>{
+    const key = sec.getAttribute('data-print-section'), sl = secLabel(key);
+    // Tables
+    sec.querySelectorAll('table').forEach(tbl=>{
+      const rows=[];
+      tbl.querySelectorAll('tr').forEach(tr=>{
+        const cells=[...tr.children].filter(td=>td.tagName==='TD'||td.tagName==='TH');
+        if(!cells.length) return;
+        rows.push(cells.map((td,i)=> tr.parentElement.tagName==='THEAD' ? clean(td) : toNum(clean(td).replace(/[▲▼⚠✅🔵🟡⚪🔴]/g,'').trim())));
+      });
+      if(rows.length<2) return;
+      const card = tbl.closest('.tcard,.capex-panel');
+      const title = card ? clean(card.querySelector('.ct,.capex-title')) : '';
+      const ws = XLSX.utils.aoa_to_sheet([[`${sl} — ${title}`],[`Period ${m.from} to ${m.to} · ${m.line}`],[],...rows]);
+      ws['!cols'] = rows[0].map((_,i)=>({wch: i<2?32:16}));
+      XLSX.utils.book_append_sheet(wb, ws, sheetName(title || sl));
+    });
+    // Charts (data behind each graph)
+    Object.values(charts).forEach(ch=>{
+      if(!ch || !ch.canvas || !sec.contains(ch.canvas) || !ch.data) return;
+      const labels = ch.data.labels || [];
+      const ds = (ch.data.datasets||[]).filter(d=>Array.isArray(d.data));
+      if(!labels.length || !ds.length) return;
+      const box = ch.canvas.closest('.cc');
+      const title = box ? clean(box.querySelector('.ct')) : (ch.canvas.id||'Chart');
+      const aoa = [[`${sl} — ${title} (chart data)`],[`Period ${m.from} to ${m.to} · ${m.line}`],[],
+        ['Label', ...ds.map(d=>d.label||'Value')],
+        ...labels.map((lb,i)=>[Array.isArray(lb)?lb.join(' '):lb, ...ds.map(d=>{const v=d.data[i]; return (v&&typeof v==='object')?(v.y??v.x):(typeof v==='string'&&!isNaN(v)?parseFloat(v):v);})])];
+      const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:34},...ds.map(()=>({wch:16}))];
+      XLSX.utils.book_append_sheet(wb, ws, sheetName('Chart - '+title));
+    });
+  });
+  const safe = s => String(s).replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'');
+  XLSX.writeFile(wb, `SHI_${safe(m.secName)}_${m.from}_to_${m.to}.xlsx`);
 }
 
 function toggleCapexTable(){
