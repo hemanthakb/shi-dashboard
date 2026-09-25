@@ -598,9 +598,18 @@ tfoot tr td{background:var(--surface2);font-weight:700;border-top:2px solid var(
         <th>Capacity hrs (to date)</th><th>Run hrs</th><th>Output CS</th><th>Earned std hrs</th>
         <th>Loading<br>(run ÷ capacity)</th><th>Efficiency<br>(output vs OEM speed)</th>
         <th style="background:var(--teal-lt);color:var(--teal)">Utilisation to date</th><th>Utilisation of month</th>
+        <th>Unused hrs</th><th style="text-align:left">Main reason unused</th>
       </tr></thead>
       <tbody id="cap-tbody"></tbody>
       <tfoot id="cap-tfoot"></tfoot>
+    </table></div>
+  </div>
+  <div class="tcard" style="margin-bottom:18px;">
+    <div class="thead"><div><div class="ct">Why capacity was unused</div><div class="cs" id="cap-idle-sub">Shift hours the lines did not run, by the reason picked in the Production DB</div></div></div>
+    <div class="tscroll"><table class="tcompact">
+      <thead><tr><th style="text-align:left">Reason</th><th>Unused hrs</th><th>Share of unused</th><th>Line-days</th></tr></thead>
+      <tbody id="cap-idle-tbody"></tbody>
+      <tfoot id="cap-idle-tfoot"></tfoot>
     </table></div>
   </div>
   </div>
@@ -2050,10 +2059,27 @@ async function connectAll(){
         sf(findCol(r,['labor_problem','labour_problem','labor problem'])) +
         sf(findCol(r,['material_problem','material problem']));
 
+      // Idle reason: dropdown column added 25 Sep 2026 straight after
+      // "Actual Out Put Kg Cumulative" (col S). Its header is blank, so it is
+      // read by position; a header containing "idle"/"reason" also works.
+      // Only that column is read — the breakdown remarks column further right
+      // also contains words like "breakdown" and must not be picked up.
+      let idleReason = '';
+      {
+        const ks = Object.keys(r);
+        let ki = ks.findIndex(k => /idle|not_running|reason_unused/.test(k));
+        if(ki < 0){ const ci = ks.findIndex(k => k.includes('actual_out_put_kg_cum')); if(ci >= 0) ki = ci + 1; }
+        if(ki >= 0 && ki < ks.length){
+          const v = String(r[ks[ki]]||'').trim().toLowerCase();
+          idleReason = IDLE_REASONS.find(x => x.toLowerCase() === v) || '';
+        }
+      }
+
       return {
         date:              dateVal,
         line:              lineVal,
         shift:             shiftVal,
+        idle_reason:       idleReason,
         product_sku:       prodVal,
         stage:             stageVal,
         run_time_hr:       sf(r['run_time_hr']||vals[12]),
@@ -3744,6 +3770,10 @@ const OEM_SPEED_OVERRIDES = [
   { match: /papaya\s*soap/i,                     csPerHr: 1.6 },  // Natura Papaya 125g (sources: 3)
   { match: /f\/?\s*soft\s*mellow.*40\s*ml/i,    csPerHr: 20  },  // Fabric Softener 40ml sachet, four-track (sources: 18)
 ];
+// Reasons supervisors pick when a line did not use its full shift.
+const IDLE_REASONS = ['No demand or plan','No material','No people','Changeover','Breakdown'];
+const IDLE_NOT_RECORDED = 'Not recorded';
+const IDLE_COLORS = {'No demand or plan':'#1a7a3c','No material':'#c0392b','No people':'#8e1b1b','Changeover':'#7fb77e','Breakdown':'#1a5fa8','Not recorded':'#a0a6b4'};
 function capacityRate(product, stage){
   const p = String(product||'').trim(), st = String(stage||'').trim().toLowerCase();
   const ov = OEM_SPEED_OVERRIDES.find(o => o.match.test(p));
@@ -3779,16 +3809,41 @@ function calcCapacity(){
   const groups = {};
   rows.forEach(r => { const k = r.date+'|'+r.line+'|'+String(r.product_sku||'').trim(); (groups[k]=groups[k]||[]).push(r); });
   const agg = {};
+  const dayRun = {}, dayReasons = {};   // key line|date
+  rows.forEach(r => { if(r.idle_reason){ const k=r.line+'|'+r.date; (dayReasons[k]=dayReasons[k]||new Set()).add(r.idle_reason); } });
   Object.values(groups).forEach(g => {
     const pack = g.filter(r => String(r.stage||'').toLowerCase().includes('pack'));
     (pack.length ? pack : g).forEach(r => {
+      const dk = r.line+'|'+r.date; dayRun[dk] = (dayRun[dk]||0) + (r.run_time_hr||0);
       const a = agg[r.line] = agg[r.line] || { runHrs:0, cs:0, earned:0, noStdCS:0, days:new Set() };
       const cs = sf(r.actual_out_put_cs), rate = capacityRate(r.product_sku, r.stage);
       a.runHrs += r.run_time_hr||0; a.cs += cs; a.days.add(r.date);
       if(rate>0) a.earned += cs/rate; else a.noStdCS += cs;
     });
   });
-  const lines = Object.entries(agg).map(([code,a]) => ({
+  // Unused hours per Mon–Sat day elapsed = day capacity − run hrs (not below 0),
+  // charged to the reason(s) picked for that line-day, else "Not recorded".
+  const workDays = [];
+  for(let d = new Date(monthStart+'T00:00:00'); ; d.setDate(d.getDate()+1)){
+    const iso = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    if(iso > tillDate || workDays.length >= CAPACITY.workingDaysPerMonth) break;
+    if(d.getDay() !== 0) workDays.push(iso);
+  }
+  const idle = {}, idleByLine = {};
+  [...IDLE_REASONS, IDLE_NOT_RECORDED].forEach(k => idle[k] = { hrs:0, lineDays:0 });
+  Object.entries(agg).forEach(([code,a]) => {  // only lines on the capacity table
+      if(!a.runHrs && !a.cs) return;
+    const byR = idleByLine[code] = {};
+    workDays.forEach(dt => {
+      const k = code+'|'+dt, unused = Math.max(0, hrsPerDay - (dayRun[k]||0));
+      if(unused <= 0) return;
+      const rs = dayReasons[k] ? [...dayReasons[k]] : [IDLE_NOT_RECORDED];
+      rs.forEach(rn => { idle[rn].hrs += unused/rs.length; idle[rn].lineDays += 1/rs.length; byR[rn] = (byR[rn]||0) + unused/rs.length; });
+    });
+  });
+  const mainIdle = code => { const e = Object.entries(idleByLine[code]||{}).filter(([k])=>k!==IDLE_NOT_RECORDED).sort((a,b)=>b[1]-a[1])[0]; return e ? e[0] : ''; };
+  const lines = Object.entries(agg).filter(([,a]) => a.runHrs || a.cs).map(([code,a]) => ({
+    mainIdle: mainIdle(code), idleHrs: Object.values(idleByLine[code]||{}).reduce((s,v)=>s+v,0),
     code, name: lname(code), days: a.days.size, runHrs: a.runHrs, cs: a.cs, earned: a.earned, noStdCS: a.noStdCS,
     capToDate, capMonth,
     loading: capToDate>0 ? a.runHrs/capToDate : 0,
@@ -3798,7 +3853,7 @@ function calcCapacity(){
   })).sort((a,b)=> b.utilToDate - a.utilToDate);
   const T = lines.reduce((t,l)=>({runHrs:t.runHrs+l.runHrs, earned:t.earned+l.earned, cs:t.cs+l.cs, noStdCS:t.noStdCS+l.noStdCS}), {runHrs:0,earned:0,cs:0,noStdCS:0});
   const n = lines.length;
-  return { monthStart, tillDate, daysElapsed, hrsPerDay, capToDate, capMonth, lines, n,
+  return { monthStart, tillDate, daysElapsed, hrsPerDay, capToDate, capMonth, lines, n, idle,
     total: { ...T, capToDate: capToDate*n, capMonth: capMonth*n,
       loading: n? T.runHrs/(capToDate*n):0, efficiency: T.runHrs>0? T.earned/T.runHrs:0,
       utilToDate: n? T.earned/(capToDate*n):0, utilMonth: n? T.earned/(capMonth*n):0 } };
@@ -3839,10 +3894,24 @@ function renderCapacity(){
       <td>${l.days}</td><td>${Math.round(l.capToDate).toLocaleString()}</td><td>${l.runHrs.toFixed(1)}</td>
       <td>${Math.round(l.cs).toLocaleString()}${l.noStdCS>0?' ⚠':''}</td><td>${l.earned.toFixed(1)}</td>
       <td>${bar(l.loading,'#e8a000')}</td><td>${bar(l.efficiency,'#1a5fa8')}</td>
-      <td style="font-weight:700">${bar(l.utilToDate,'#0d7a6b')}</td><td>${pct(l.utilMonth)}${over(l.utilMonth)}</td></tr>`).join('');
+      <td style="font-weight:700">${bar(l.utilToDate,'#0d7a6b')}</td><td>${pct(l.utilMonth)}${over(l.utilMonth)}</td>
+      <td>${Math.round(l.idleHrs).toLocaleString()}</td><td style="text-align:left">${l.mainIdle ? `<span style="color:${IDLE_COLORS[l.mainIdle]};font-weight:700">${l.mainIdle}</span>` : '<span style="color:var(--text3)">Not recorded</span>'}</td></tr>`).join('');
   if(tf) tf.innerHTML = `<tr><td style="text-align:left">TOTAL</td><td style="text-align:left">${c.n} lines</td><td>–</td>
       <td>${Math.round(T.capToDate).toLocaleString()}</td><td>${T.runHrs.toFixed(1)}</td><td>${Math.round(T.cs).toLocaleString()}</td><td>${T.earned.toFixed(1)}</td>
-      <td>${pct(T.loading)}</td><td>${pct(T.efficiency)}</td><td>${pct(T.utilToDate)}</td><td>${pct(T.utilMonth)}</td></tr>`;
+      <td>${pct(T.loading)}</td><td>${pct(T.efficiency)}</td><td>${pct(T.utilToDate)}</td><td>${pct(T.utilMonth)}</td>
+      <td>${Math.round(c.lines.reduce((s,l)=>s+l.idleHrs,0)).toLocaleString()}</td><td></td></tr>`;
+  const itb = $('cap-idle-tbody'), itf = $('cap-idle-tfoot');
+  if(itb){
+    const tot = Object.values(c.idle).reduce((s,v)=>s+v.hrs,0);
+    const ents = Object.entries(c.idle).filter(([,v])=>v.hrs>0).sort((a,b)=> (a[0]===IDLE_NOT_RECORDED) - (b[0]===IDLE_NOT_RECORDED) || b[1].hrs-a[1].hrs);
+    itb.innerHTML = ents.map(([k,v])=>`<tr><td style="text-align:left"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${IDLE_COLORS[k]};margin-right:6px"></span>${k}</td>
+      <td>${Math.round(v.hrs).toLocaleString()}</td><td>${bar(tot>0?v.hrs/tot:0, IDLE_COLORS[k])}</td><td>${Math.round(v.lineDays)}</td></tr>`).join('')
+      || '<tr><td colspan="4" style="color:var(--text3);text-align:left">No unused shift time this month.</td></tr>';
+    if(itf) itf.innerHTML = `<tr><td style="text-align:left">TOTAL</td><td>${Math.round(tot).toLocaleString()}</td><td>100%</td><td>${Math.round(Object.values(c.idle).reduce((s,v)=>s+v.lineDays,0))}</td></tr>`;
+    const nr = c.idle[IDLE_NOT_RECORDED].hrs, is = $('cap-idle-sub');
+    if(is) is.textContent = `Shift hours the lines did not run (day capacity − run hrs, Mon–Sat to ${fmtD(c.tillDate)}), by the reason picked in the Production DB`
+      + (tot>0 && nr/tot>0.5 ? ` · ${Math.round(nr/tot*100)}% not yet recorded` : '');
+  }
 }
 
 function renderOEE(){
