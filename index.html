@@ -939,7 +939,7 @@ function buildWIPBalances(to){
   function fgConsumedFor(fgSubstring){
     if(!prodDataFull || !prodDataFull.length || !trackingStart) return 0;
     const needle = fgSubstring.toLowerCase();
-    return prodDataFull.filter(r=>r.date>=trackingStart && r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle))
+    return prodDataFull.filter(r=>r.date>=trackingStart && r.date<=to && String(r.product_sku||'').toLowerCase().includes(needle) && isFGOutputRow(r))
       .reduce((s,r)=>s+(parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0),0);
   }
 
@@ -1134,17 +1134,35 @@ function parseLabourCSV(rows, from, to, attendOT) {
   // daily totals add up exactly to the normal + OT + DOT cost.
   // Where attendance-verified hours exist for a date (OT_ATTENDANCE_CUTOVER+),
   // that date's actual normal/OT/DOT mix sets the cost per hour instead.
+  //
+  // TOTAL = TRACKER ACTUAL COST (confirmed with HOM, 30 Sep 2026). For every
+  // date HR has entered in the tracker, the day's labour cost is the tracker's
+  // own cost — payroll Normal + OT + DOT at their rates, plus C/MP contract
+  // days at the fixed day rate. ERP Labour Allocation hours are used ONLY to
+  // split that day's cost across lines/products (pro rata to hours). So the
+  // Total Labour Cost equals the Normal + OT + DOT + C/MP figures exactly,
+  // whatever the ERP hours are. A tracker day with no ERP rows at all can't
+  // be split by line, so it is kept in the total as "unallocated".
   const attendByDate = (attendOT && attendOT.used && attendOT.byDate) || {};
-  const attendRateForDate = date => {
+  const trackerDayCost = date => {
     const a = attendByDate[date];
-    if(!a || date < OT_ATTENDANCE_CUTOVER) return null;
-    const hrs = a.normal + a.ot + a.dot;   // payroll staff only (contract rows carry no hours)
-    return hrs > 0 ? a.cost / hrs : null;
+    if(!a || date < OT_ATTENDANCE_CUTOVER || !(a.present > 0 || a.contractDays > 0)) return null;
+    return a.cost + (a.contractDays||0) * EMPLOYMENT_RATES.CONTRACT_DAY_RATE;
   };
+  const erpHrsByDate = {};
+  Object.values(employeeDayTotals).forEach(ed => { erpHrsByDate[ed.date] = (erpHrsByDate[ed.date]||0) + (ed.hours||0); });
+  let trackerCost = 0, unallocatedCost = 0, estCostTotal = 0;
+  Object.keys(attendByDate).forEach(date => {
+    const tc = trackerDayCost(date); if(tc == null) return;
+    trackerCost += tc;
+    if(!(erpHrsByDate[date] > 0)) unallocatedCost += tc;
+  });
   const edRate = {};
   Object.entries(employeeDayTotals).forEach(([k, ed]) => {
-    const ar = attendRateForDate(ed.date);
-    edRate[k] = ar != null ? ar : (ed.hours > 0 ? costOfSplit(splitDayHours(ed.date, ed.hours)) / ed.hours : 0);
+    const tc = trackerDayCost(ed.date);
+    if(tc != null){ edRate[k] = erpHrsByDate[ed.date] > 0 ? tc / erpHrsByDate[ed.date] : 0; return; }
+    edRate[k] = ed.hours > 0 ? costOfSplit(splitDayHours(ed.date, ed.hours)) / ed.hours : 0;
+    if(ed.date >= OT_ATTENDANCE_CUTOVER) estCostTotal += edRate[k] * ed.hours; // ERP estimate, day not yet in tracker
   });
 
   // Pass 2: aggregate hours and cost.
@@ -1174,6 +1192,8 @@ function parseLabourCSV(rows, from, to, attendOT) {
     dailyTotals[date].hours = parseFloat((dailyTotals[date].hours + hrs).toFixed(2));
     dailyTotals[date].cost  += cost;
   });
+  // Tracker days with no ERP rows: in the total, not in any line.
+  totalCost += unallocatedCost;
   // Round once at the end (rounding every row drifted the totals).
   Object.values(lineTotals).forEach(v => { v.cost = Math.round(v.cost); });
   Object.values(lineDailyTotals).forEach(d => Object.values(d).forEach(v => { v.cost = Math.round(v.cost); }));
@@ -1210,7 +1230,7 @@ function parseLabourCSV(rows, from, to, attendOT) {
     // Dates with attendance-verified hours (OT_ATTENDANCE_CUTOVER+) take their
     // normal/OT/DOT split from the tracker instead (merged in below) — skip
     // here so the same hours aren't split twice by two different methods.
-    if(attendCovers && date >= OT_ATTENDANCE_CUTOVER && attendOT.byDate[date] && attendOT.byDate[date].present > 0) return;
+    if(trackerDayCost(date) != null) return;
     // Actuals from the tracker wherever HR has entered the day. A day with ERP
     // hours that HR hasn't entered YET is estimated from ERP hours (confirmed
     // with HOM, 24 Sep 2026) and is replaced by actuals automatically on the
@@ -1246,6 +1266,11 @@ function parseLabourCSV(rows, from, to, attendOT) {
     employees:     employeeSet.size,
     totalHours:    parseFloat(totalHours.toFixed(2)),
     totalCost:     Math.round(totalCost),
+    costSplit: {                 // how Total Labour Cost is made up
+      tracker:     Math.round(trackerCost),      // HR-entered days: Normal + OT + DOT + C/MP
+      unallocated: Math.round(unallocatedCost),  // of which: tracker days with no ERP rows
+      estimate:    Math.round(estCostTotal),     // cutover+ days not yet in tracker (ERP-based)
+    },
     lineTotals,
     lineEmployees,
     lineDailyTotals,
@@ -1434,6 +1459,32 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
 // Format: { 'Product Name|Stage': { headcount, csPerHr, line, kgPerCS } }
 let PROD_STANDARDS = {};  // populated from sources sheet on connect
 let PROD_STAGE_RATES = {}; // 'product|stage' (lower-case) -> OEM CS/hr, for capacity utilisation
+
+// ── FG OUTPUT ROW RULE (confirmed with HOM, 30 Sep 2026) ────────────────────
+// Liquid products go Filling → Packing and are logged once per stage; the kg
+// at both stages is the same goods, and filling is often done on a different
+// day from packing. Rule: for any product that has a Packing row logged in
+// the Production DB, its FILLING rows are dropped from kg / CS output (every
+// day). Only Filling is affected — Counting, Wrapping, Finishing and other
+// stages always count. A liquid SKU only ever logged at Filling keeps its
+// Filling kg, so output isn't lost when Packing isn't recorded. Run time / labour hours of every stage
+// still count (that work was really done). Mixing (Batch Production Master)
+// is separate and unaffected.
+let _packedInDataRef = null, _packedInData = new Set();
+function isFGOutputRow(r){
+  const st = String(r.stage||r['stage']||'').trim().toLowerCase();
+  // Only FILLING is dropped (liquid lines). Counting (incense), Wrapping
+  // (soaps), Finishing etc. always count — per HOM, 30 Sep 2026.
+  if(!st.includes('fill')) return true;
+  const p = String(r.product_sku||r['product']||'').trim().toLowerCase();
+  if(!p) return true;
+  if(_packedInDataRef !== prodDataFull){
+    _packedInDataRef = prodDataFull; _packedInData = new Set();
+    (prodDataFull||[]).forEach(x => { if(String(x.stage||'').toLowerCase().includes('pack'))
+      _packedInData.add(String(x.product_sku||'').trim().toLowerCase()); });
+  }
+  return !_packedInData.has(p);
+}
 
 function buildProdStandards(srcRows) {
   PROD_STANDARDS = {};
@@ -1922,6 +1973,8 @@ function getFiltered(){
       if(BATCH_LINE_CODES.has(r.line)) return;
       // Apply production line filter
       if(lineFilter !== 'all' && r.line !== lineFilter) return;
+      // Filling rows of packed liquid products are the same goods — skip
+      if(!isFGOutputRow(r)) return;
       if(!dayMap[d]) dayMap[d] = {date:d, pc:0, ac:0, pcs_p:0, pcs_a:0, kg_a:0};
       dayMap[d].pcs_p += sf(r.planned_out_put_cs);
       dayMap[d].pcs_a += sf(r.actual_out_put_cs);
@@ -2230,19 +2283,24 @@ function getProdActuals(from, to) {
     if(!line) return;
     if(lineFilter !== 'all' && line !== lineFilter) return;
     const isBatch = BATCH_LINES.includes(line);
+    // Filling kg/CS of packed liquid products is dropped (see isFGOutputRow).
+    // Run/labour hours of every stage still count.
+    const isFG = isFGOutputRow(r);
 
     // Line aggregation
     if(!lineAgg[line]) lineAgg[line] = {runHrs:0,labHrs:0,actCS:0,actKg:0,planCS:0,planHrs:0,isBatch};
     lineAgg[line].runHrs  += runHrs;
     lineAgg[line].labHrs  += labHrs;
-    lineAgg[line].actCS   += actCS;
-    lineAgg[line].actKg   += actKg;
-    lineAgg[line].planCS  += planCS;
+    if(isFG){
+      lineAgg[line].actCS   += actCS;
+      lineAgg[line].actKg   += actKg;
+      lineAgg[line].planCS  += planCS;
+    }
     lineAgg[line].planHrs += planHrs;
 
     // Daily aggregation
     if(!dailyAgg[date]) dailyAgg[date] = {actKg:0,actCS:0,runHrs:0,labHrs:0};
-    if(!isBatch) {
+    if(!isBatch && isFG) {
       dailyAgg[date].actKg += actKg;
       dailyAgg[date].actCS += actCS;
       totalKg += actKg;
@@ -2257,9 +2315,11 @@ function getProdActuals(from, to) {
     if(product && !isBatch) {
       if(!productAgg[product]) productAgg[product] = {line,runHrs:0,actCS:0,actKg:0,planCS:0};
       productAgg[product].runHrs += runHrs;
-      productAgg[product].actCS  += actCS;
-      productAgg[product].actKg  += actKg;
-      productAgg[product].planCS += planCS;
+      if(isFG){
+        productAgg[product].actCS  += actCS;
+        productAgg[product].actKg  += actKg;
+        productAgg[product].planCS += planCS;
+      }
     }
   });
 
@@ -2328,11 +2388,14 @@ function renderHourlyRates() {
     const actCS   = sf(r['actual_out_put_cs']||0);
     const actKg   = sf(r['actual_out_put_kg']||0);
 
-    if(product && (actCS > 0 || actKg > 0)) {
+    if(product && (actCS > 0 || actKg > 0 || runHrs > 0)) {
       if(!prodActuals[product]) prodActuals[product] = { runHrs:0, actCS:0, actKg:0 };
       prodActuals[product].runHrs += runHrs;
-      prodActuals[product].actCS  += actCS;
-      prodActuals[product].actKg  += actKg;
+      // Filling + Packing cost ÷ packed CS only (filling CS is the same goods)
+      if(isFGOutputRow(r)){
+        prodActuals[product].actCS  += actCS;
+        prodActuals[product].actKg  += actKg;
+      }
     }
   });
 
@@ -2751,8 +2814,9 @@ function computeFGOutputQty(from,to){
   });
   let kg=0; const days=new Set();
   Object.values(groups).forEach(rowsInGroup=>{
-    const packingRows = rowsInGroup.filter(r=>String(r.stage||'').toLowerCase().includes('pack'));
-    const useRows = packingRows.length>0 ? packingRows : rowsInGroup;
+    // Only Filling rows of products that have a Packing stage are dropped
+    // (liquids, every day). Counting/Wrapping/etc. are kept (HOM, 30 Sep 2026).
+    const useRows = rowsInGroup.filter(isFGOutputRow);
     useRows.forEach(r=>{
       const v = parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0;
       kg += v;
@@ -3190,7 +3254,7 @@ function renderLabour(c){
       <div class="stream-card labour"><div class="klbl">Normal Hours Cost · ${lkr(R.normalHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--blue)">${fmt(otb.normalCost)}</div>${cardLines(otb.normalHours, otb.normalCost, otb.estNormalHours||0, otb.estNormalCost||0)}${(otb.contract && otb.contract.days>0) ? `<div class="kmom">Contract (C/MP) · fixed LKR ${R.CONTRACT_DAY_RATE.toLocaleString()}/day, no OT: <b>${otb.contract.days} days · ${fmt(otb.contract.cost)}</b></div>` : ''}${momLine(momLblL,otb.normalCost,otbPrev.normalCost)}</div>
       <div class="stream-card maint"><div class="klbl">Overtime Cost · ${lkr(R.otHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--amber)">${fmt(otb.otCost)}</div>${cardLines(otb.otHours, otb.otCost, otb.estOtHours||0, otb.estOtCost||0)}${momLine(momLblL,otb.otCost,otbPrev.otCost)}</div>
       <div class="stream-card" style="border-top-color:var(--purple)"><div class="klbl">Double OT — Sun/Poya · ${lkr(R.dotHr)}/hr</div><div class="kval" style="font-size:18px;color:var(--purple)">${fmt(otb.dotCost)}</div>${cardLines(otb.dotHours, otb.dotCost, otb.estDotHours||0, otb.estDotCost||0)}${momLine(momLblL,otb.dotCost,otbPrev.dotCost)}</div>
-      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} total hrs · normal + OT + DOT costed separately</div>${momLine(momLblL,labTotal,prevLabTotal)}</div>`;
+      <div class="stream-card" style="border-top-color:var(--red)"><div class="klbl">Total Labour Cost</div><div class="kval" style="font-size:18px;color:var(--red)">${fmt(labTotal)}</div><div class="ksub">${totalHrs.toFixed(1)} ERP hrs · normal + OT + DOT costed separately</div>${(()=>{const cs=allocData.costSplit||{};return (cs.tracker>0?`<div class="kmom" style="color:var(--blue)">Actual (HR tracker, incl. C/MP): <b>${fmt(cs.tracker)}</b>${cs.estimate>0?` · Estimated (not yet entered): <b>${fmt(cs.estimate)}</b>`:''}${cs.unallocated>0?` · No ERP line split: <b>${fmt(cs.unallocated)}</b>`:''}</div>`:'');})()}${momLine(momLblL,labTotal,prevLabTotal)}</div>`;
   } else {
     // No live data — show placeholder
     $('labour-kpis').innerHTML=`
