@@ -2881,8 +2881,7 @@ function renderKPIs(rows,c){
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
     {c:'green',l:'Total kg Produced (Mixing + FG)',v:grandKg>0?Math.round(grandKg).toLocaleString()+' kg':'–',s:'Batch/mixing stage + packing/finishing output combined',b:grandKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu',extraHtml:grandKg>0?(
       infoLine('Batch Mixing Qty (Batch Production Master)', Math.round(batchKg).toLocaleString()+' kg') +
-      infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fgKg).toLocaleString()+' kg') +
-      infoLine('Liquid Filling kg removed (same goods as Packing)', Math.round(fgOut ? fgOut.fillingKg||0 : 0).toLocaleString()+' kg')
+      infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fgKg).toLocaleString()+' kg')
     ):''},
   ];
   const kpiHtml = kpis.map(k=>{
