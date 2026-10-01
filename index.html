@@ -1460,30 +1460,16 @@ function parseAttendanceOT(dailyRows, histRows, from, to) {
 let PROD_STANDARDS = {};  // populated from sources sheet on connect
 let PROD_STAGE_RATES = {}; // 'product|stage' (lower-case) -> OEM CS/hr, for capacity utilisation
 
-// ── FG OUTPUT ROW RULE (confirmed with HOM, 30 Sep 2026) ────────────────────
-// Liquid products go Filling → Packing and are logged once per stage; the kg
-// at both stages is the same goods, and filling is often done on a different
-// day from packing. Rule: for any product that has a Packing row logged in
-// the Production DB, its FILLING rows are dropped from kg / CS output (every
-// day). Only Filling is affected — Counting, Wrapping, Finishing and other
-// stages always count. A liquid SKU only ever logged at Filling keeps its
-// Filling kg, so output isn't lost when Packing isn't recorded. Run time / labour hours of every stage
-// still count (that work was really done). Mixing (Batch Production Master)
-// is separate and unaffected.
-let _packedInDataRef = null, _packedInData = new Set();
+// ── FG OUTPUT ROW RULE (confirmed with HOM, 30 Sep / 1 Oct 2026) ─────────
+// Liquids are logged at Filling and again at Packing — the same goods, often
+// on different days. FILLING rows are therefore never counted in kg / CS
+// output; the Packing row is the FG output. Only Filling is excluded —
+// Counting (incense), Wrapping (soaps), Finishing and other stages always
+// count. Run time / labour hours of Filling still count (the work was done).
+// Mixing (Batch Production Master) is separate and unaffected.
 function isFGOutputRow(r){
   const st = String(r.stage||r['stage']||'').trim().toLowerCase();
-  // Only FILLING is dropped (liquid lines). Counting (incense), Wrapping
-  // (soaps), Finishing etc. always count — per HOM, 30 Sep 2026.
-  if(!st.includes('fill')) return true;
-  const p = String(r.product_sku||r['product']||'').trim().toLowerCase();
-  if(!p) return true;
-  if(_packedInDataRef !== prodDataFull){
-    _packedInDataRef = prodDataFull; _packedInData = new Set();
-    (prodDataFull||[]).forEach(x => { if(String(x.stage||'').toLowerCase().includes('pack'))
-      _packedInData.add(String(x.product_sku||'').trim().toLowerCase()); });
-  }
-  return !_packedInData.has(p);
+  return !st.includes('fill');
 }
 
 function buildProdStandards(srcRows) {
@@ -2812,8 +2798,9 @@ function computeFGOutputQty(from,to){
     if(!groups[key]) groups[key] = [];
     groups[key].push(r);
   });
-  let kg=0; const days=new Set();
+  let kg=0, fillingKg=0; const days=new Set();
   Object.values(groups).forEach(rowsInGroup=>{
+    rowsInGroup.forEach(r=>{ if(!isFGOutputRow(r)) fillingKg += parseFloat(String(r.actual_out_put_kg||0).replace(/,/g,''))||0; });
     // Only Filling rows of products that have a Packing stage are dropped
     // (liquids, every day). Counting/Wrapping/etc. are kept (HOM, 30 Sep 2026).
     const useRows = rowsInGroup.filter(isFGOutputRow);
@@ -2823,7 +2810,7 @@ function computeFGOutputQty(from,to){
       days.add(r.date);
     });
   });
-  return { kg, days: days.size };
+  return { kg, fillingKg, days: days.size };
 }
 
 // ── BATCH MIXING QTY (Batch Production Master, period throughput) ──────────
@@ -2894,7 +2881,8 @@ function renderKPIs(rows,c){
     {c:'teal',l:'Output Efficiency',v:eff+'%',s:`${Math.round(pa).toLocaleString()} of ${Math.round(pp).toLocaleString()} CS produced`,b:parseFloat(eff)<50?'Below 50%':parseFloat(eff)<75?'Mid':'Good',bt:parseFloat(eff)<50?'up':parseFloat(eff)<75?'warn':'dn'},
     {c:'green',l:'Total kg Produced (Mixing + FG)',v:grandKg>0?Math.round(grandKg).toLocaleString()+' kg':'–',s:'Batch/mixing stage + packing/finishing output combined',b:grandKg>0?`${rows.length} days${c.promoKg>0?` · Promo kg (excluded): ${Math.round(c.promoKg).toLocaleString()} kg`:''}`:'–',bt:'neu',extraHtml:grandKg>0?(
       infoLine('Batch Mixing Qty (Batch Production Master)', Math.round(batchKg).toLocaleString()+' kg') +
-      infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fgKg).toLocaleString()+' kg')
+      infoLine('FG Output Qty (Packing/Finishing lines)', Math.round(fgKg).toLocaleString()+' kg') +
+      infoLine('Liquid Filling kg removed (same goods as Packing)', Math.round(fgOut ? fgOut.fillingKg||0 : 0).toLocaleString()+' kg')
     ):''},
   ];
   const kpiHtml = kpis.map(k=>{
