@@ -3066,10 +3066,15 @@ function renderMix(c){
 //                 month's OT budget has been consumed, not pace-to-date)
 //   Status      = GREEN < AMBER trigger ≤ AMBER ≤ RED trigger < RED
 //   Projection  = actual ÷ (budget to date ÷ full-month budget)  (tracker E17)
-// Always tracks the LATEST month HR has entered in the tracker (independent of
-// the date filters), so it stays current on every refresh without anyone
-// changing dates. Whole factory (the tracker isn't split by production line). Double OT has no budget, so it is
-// shown alongside rather than in the needle.
+// Follows the selected DATE FROM – DATE TO filter (per HOM, 7 Oct 2026):
+//   • a full past month (e.g. 01/09–30/09) shows that month's final result;
+//   • any custom range shows OT used vs the budget for just those days;
+//   • a range starting on the 1st and ending today ("This Month") is treated
+//     as the whole current month, so the needle still shows how much of the
+//     month's budget is gone, with a month-end projection.
+// Days before the tracker cutover carry no data and are left out of the budget.
+// Whole factory (the tracker isn't split by production line). Double OT has no
+// budget, so it is shown alongside rather than in the needle.
 const OT_GAUGE = {
   weekdayBudgetHrs: 3,    // OT hrs/person/weekday  (tracker B5)
   saturdayBudgetHrs: 7,   // OT hrs/person/Saturday, 1pm–8pm (tracker B6)
@@ -3079,31 +3084,43 @@ const OT_GAUGE = {
 };
 function computeOTGauge(){
   if(!rawAttendDaily.length && !rawAttendHist.length) return null;
-  // Latest date HR has entered (from the cutover on) sets the month to track.
-  const all = parseAttendanceOT(rawAttendDaily, rawAttendHist, OT_ATTENDANCE_CUTOVER, '2099-12-31');
-  const allDates = Object.keys(all.byDate||{}).sort();
-  if(!allDates.length) return null;
-  const [y,m] = allDates[allDates.length-1].split('-').map(Number);
   const pad = n => String(n).padStart(2,'0');
-  const monthStart = `${y}-${pad(m)}-01`;
-  const lastDay = new Date(y, m, 0).getDate();
-  const monthEnd = `${y}-${pad(m)}-${pad(lastDay)}`;
-  if(!rawAttendDaily.length && !rawAttendHist.length) return { monthStart, monthEnd, noData:true };
-  const att = parseAttendanceOT(rawAttendDaily, rawAttendHist, monthStart, monthEnd);
-  const dates = Object.keys(att.byDate||{}).filter(d => att.byDate[d].present > 0).sort();
-  if(!att.used || !dates.length) return { monthStart, monthEnd, noData:true };
+  const iso = dt => `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+  const monthLast = d => { const [y,m]=d.split('-').map(Number); return `${y}-${pad(m)}-${pad(new Date(y,m,0).getDate())}`; };
+  const today = iso(new Date());
+  let from = ($('f-from')||{}).value || '', to = ($('f-to')||{}).value || '';
+  if(!from || !to){
+    // No filter set: fall back to the latest month HR has entered
+    const all = parseAttendanceOT(rawAttendDaily, rawAttendHist, OT_ATTENDANCE_CUTOVER, '2099-12-31');
+    const ds = Object.keys(all.byDate||{}).sort();
+    if(!ds.length) return null;
+    from = ds[ds.length-1].slice(0,7)+'-01'; to = monthLast(from);
+  }
+  if(from > to) [from, to] = [to, from];
+  const selFrom = from, selTo = to;
+  // "This Month" (1st → today) = whole current month, projected to month end
+  let periodEnd = to;
+  const isMonthToDate = from.slice(8)==='01' && from.slice(0,7)===to.slice(0,7) && to >= today;
+  if(isMonthToDate) periodEnd = monthLast(from);
+  const isFullMonth = from.slice(8)==='01' && from.slice(0,7)===periodEnd.slice(0,7) && periodEnd===monthLast(from);
+  const periodStart = from < OT_ATTENDANCE_CUTOVER ? OT_ATTENDANCE_CUTOVER : from;
+  const base = { from:selFrom, to:selTo, periodStart, periodEnd, isFullMonth };
+  if(periodStart > periodEnd) return { ...base, noData:true, beforeCutover:true };
+  const att = parseAttendanceOT(rawAttendDaily, rawAttendHist, periodStart, periodEnd);
+  const dates = Object.keys(att.byDate||{}).filter(d => d>=periodStart && d<=periodEnd && att.byDate[d].present > 0).sort();
+  if(!dates.length) return { ...base, noData:true };
   const lastActual = dates[dates.length-1];
   const G = OT_GAUGE;
   const kind = d => isSundayOrPoya(d) ? 'off' : (new Date(d+'T00:00:00').getDay()===6 ? 'sat' : 'wd');
   const perHr = { wd:G.weekdayBudgetHrs, sat:G.saturdayBudgetHrs, off:0 };
   // Average attendance on entered weekdays / Saturdays (for days not yet entered)
   const seen = { wd:[], sat:[] };
-  dates.forEach(d => { const k = kind(d); if(k!=='off' && att.byDate[d].present>0) seen[k].push(att.byDate[d].present); });
+  dates.forEach(d => { const k = kind(d); if(k!=='off') seen[k].push(att.byDate[d].present); });
   const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
   const avgWd = avg(seen.wd), avgSat = seen.sat.length ? avg(seen.sat) : avgWd;
   let budgetToDate=0, budgetMonth=0, daysLeft=0, personDaysLeft=0;
-  for(let dd=1; dd<=lastDay; dd++){
-    const d = `${y}-${pad(m)}-${pad(dd)}`, k = kind(d);
+  for(let dt=new Date(periodStart+'T00:00:00'); iso(dt)<=periodEnd; dt.setDate(dt.getDate()+1)){
+    const d = iso(dt), k = kind(d);
     if(k==='off') continue;
     if(d <= lastActual){
       const b = ((att.byDate[d]||{}).present||0) * perHr[k];
@@ -3116,13 +3133,13 @@ function computeOTGauge(){
   }
   const hc = Math.round(avgWd);
   const actual = att.otHours, dot = att.dotHours;
-  const pace = budgetMonth>0 ? actual/budgetMonth : 0;   // share of the MONTH's budget used
+  const pace = budgetMonth>0 ? actual/budgetMonth : 0;   // share of the PERIOD's budget used
   const status = pace > G.red ? 'RED' : pace >= G.amber ? 'AMBER' : 'GREEN';
   const projected = budgetToDate>0 ? actual/(budgetToDate/budgetMonth) : actual;
   const remaining = budgetMonth - actual;
   const perPersonDay = personDaysLeft>0 ? remaining/personDaysLeft : 0;
   const amberLimit  = personDaysLeft>0 ? (G.amber*budgetMonth - actual)/personDaysLeft : 0;
-  return { monthStart, monthEnd, lastActual, hc, avgSat:Math.round(avgSat), budgetToDate, budgetMonth, daysLeft,
+  return { ...base, monthStart:periodStart, monthEnd:periodEnd, lastActual, hc, avgSat:Math.round(avgSat), budgetToDate, budgetMonth, daysLeft,
            actual, dot, pace, status, projected, remaining, perPersonDay, amberLimit };
 }
 function renderOTGauge(){
@@ -3134,10 +3151,14 @@ function renderOTGauge(){
   const hrs = v => Math.round(v).toLocaleString()+' hrs';
   if(!g || g.noData){
     el.className='otg none';
-    const msg = 'OT pace gauge — waiting for Labour Attendance Tracker data (loads with the dashboard refresh).';
+    const msg = !g ? 'OT pace gauge — waiting for Labour Attendance Tracker data (loads with the dashboard refresh).'
+      : g.beforeCutover ? `OT pace gauge — no attendance-tracker data for ${fmtD(g.from)}–${fmtD(g.to)} (tracker starts ${fmtD(OT_ATTENDANCE_CUTOVER)}/${OT_ATTENDANCE_CUTOVER.slice(0,4)}).`
+      : `OT pace gauge — no attendance entries yet for ${fmtD(g.from)}–${fmtD(g.to)}.`;
     el.innerHTML = `<div class="otg-cap" style="grid-column:1/-1;text-align:left">${msg}</div>`;
     return;
   }
+  const per = g.isFullMonth ? monthName(g.periodStart) : `${fmtD(g.periodStart)}–${fmtD(g.periodEnd)}`;
+  const perWord = g.isFullMonth ? 'month' : 'period';
   const col = {GREEN:'var(--green)',AMBER:'var(--gold-dk)',RED:'var(--red)'}[g.status];
   const bg  = {GREEN:'var(--green-lt)',AMBER:'var(--gold-lt)',RED:'var(--red-lt)'}[g.status];
   // Semicircle gauge: 0% at left, G.scaleMax at right
@@ -3146,7 +3167,7 @@ function renderOTGauge(){
   const arc = (v0,v1,c) => { const [x0,y0]=pt(v0),[x1,y1]=pt(v1); return `<path d="M${x0.toFixed(1)} ${y0.toFixed(1)} A${r} ${r} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)}" fill="none" stroke="${c}" stroke-width="18"/>`; };
   const [nx,ny] = (()=>{ const a=Math.PI*(1-Math.min(Math.max(g.pace,0),G.scaleMax)/G.scaleMax); return [cx+74*Math.cos(a), cy-74*Math.sin(a)]; })();
   const lbl = (v,t,dx,dy) => { const [x,y]=pt(v); return `<text x="${(x+dx).toFixed(0)}" y="${(y+dy).toFixed(0)}" font-size="9" fill="#8b92a5">${t}</text>`; };
-  const svg = `<svg viewBox="0 0 220 132" width="230" role="img" aria-label="OT used ${Math.round(g.pace*100)}% of month budget">
+  const svg = `<svg viewBox="0 0 220 132" width="230" role="img" aria-label="OT used ${Math.round(g.pace*100)}% of ${per} budget">
     ${arc(0,G.amber,'#1a7a3c')}${arc(G.amber,G.red,'#e8a000')}${arc(G.red,G.scaleMax,'#c0392b')}
     <line x1="${cx}" y1="${cy}" x2="${nx.toFixed(1)}" y2="${ny.toFixed(1)}" stroke="#1a1d26" stroke-width="4" stroke-linecap="round"/>
     <circle cx="${cx}" cy="${cy}" r="8" fill="#1a1d26"/>
@@ -3158,22 +3179,22 @@ function renderOTGauge(){
   el.innerHTML = `
     <div style="text-align:center">${svg}
       <div class="otg-pace" style="color:${col}">${Math.round(g.pace*100)}% <span class="otg-chip" style="background:${bg};color:${col}">${g.status}</span></div>
-      <div class="otg-cap">OT used of ${monthName(g.monthStart)} budget · actual to ${fmtD(g.lastActual)}</div>
+      <div class="otg-cap">OT used of ${per} budget · actual to ${fmtD(g.lastActual)}${g.periodStart>g.from?` · tracker data from ${fmtD(g.periodStart)}`:''}</div>
     </div>
-    <div><div class="otg-lbl">Actual vs month budget</div>
+    <div><div class="otg-lbl">Actual vs ${perWord} budget</div>
       <div class="otg-big">${hrs(g.actual)} <span style="font-size:13px;font-weight:600;color:var(--text3)">of ${hrs(g.budgetMonth)}</span></div>
       <div class="otg-sub">${fmt(g.actual*R.otHr)} of ${fmt(g.budgetMonth*R.otHr)} budget</div>
       <div class="otg-note">Double OT: <b>${hrs(g.dot)} · ${fmt(g.dot*R.dotHr)}</b> (no budget)</div></div>
-    <div><div class="otg-lbl">If we continue at this rate</div>
-      <div class="otg-big">≈${hrs(g.projected)} by ${fmtD(g.monthEnd)}</div>
+    <div><div class="otg-lbl">${g.daysLeft>0?'If we continue at this rate':'Final result'}</div>
+      <div class="otg-big">${g.daysLeft>0?'≈':''}${hrs(g.projected)} by ${fmtD(g.monthEnd)}</div>
       <div class="otg-sub">≈ ${fmt(g.projected*R.otHr)} vs budget ${hrs(g.budgetMonth)} · ${fmt(g.budgetMonth*R.otHr)}</div>
       <div class="otg-note" style="font-weight:600;color:${under?'var(--green)':'var(--red)'}">${under?'▼':'▲'} ${hrs(Math.abs(diff))} (${fmt(Math.abs(diff)*R.otHr)}) ${under?'under':'over'} budget</div></div>
-    <div><div class="otg-lbl">Room left this month</div>
+    <div><div class="otg-lbl">Room left this ${perWord}</div>
       ${g.daysLeft>0 ? `
       <div class="otg-big" style="${g.remaining<0?'color:var(--red)':''}">${g.remaining<0?'Over by ':''}${hrs(Math.abs(g.remaining))}</div>
-      <div class="otg-sub">${g.remaining>0?`≈ ${g.perPersonDay.toFixed(1)} OT hrs/person/day for the ${g.daysLeft} working day${g.daysLeft>1?'s':''} left`:'Month budget already used'}</div>
-      <div class="otg-note">${g.amberLimit>0?`Month ends AMBER if above ≈ ${g.amberLimit.toFixed(1)} hrs/person/day`:'Already past the AMBER line for the month'}</div>`
-      : `<div class="otg-big">${hrs(Math.max(g.remaining,0))}</div><div class="otg-sub">All working days in the month entered</div>`}
+      <div class="otg-sub">${g.remaining>0?`≈ ${g.perPersonDay.toFixed(1)} OT hrs/person/day for the ${g.daysLeft} working day${g.daysLeft>1?'s':''} left`:`${g.isFullMonth?'Month':'Period'} budget already used`}</div>
+      <div class="otg-note">${g.amberLimit>0?`${g.isFullMonth?'Month':'Period'} ends AMBER if above ≈ ${g.amberLimit.toFixed(1)} hrs/person/day`:`Already past the AMBER line for the ${perWord}`}</div>`
+      : `<div class="otg-big">${hrs(Math.max(g.remaining,0))}</div><div class="otg-sub">All working days in the ${perWord} entered</div>`}
       <div class="otg-cap" style="text-align:left;margin-top:6px">Payroll staff only (C/MP contract workers have no OT) · Budget = people present each day × ${G.weekdayBudgetHrs} hrs (weekday) / ${G.saturdayBudgetHrs} hrs (Sat) · avg ${g.hc} present on weekdays, ${g.avgSat} on Saturdays</div></div>`;
 }
 
@@ -3558,7 +3579,7 @@ function buildExport(){
       // text without the gauge dial's scale labels (SVG)
       const cl = c.cloneNode(true); cl.querySelectorAll('svg').forEach(x=>x.remove());
       const all = (cl.textContent||'').replace(/\s+/g,' ').trim();
-      const lblTxt = lbl ? clean(lbl) : (c.querySelector('.otg-pace') ? 'OT used of month budget' : '');
+      const lblTxt = lbl ? clean(lbl) : (c.querySelector('.otg-pace') ? 'OT used of budget (selected period)' : '');
       const valTxt = clean(val);
       const detail = all.replace(lbl?clean(lbl):'','').replace(valTxt,'').replace(/\s+/g,' ').trim();
       summary.push([lblTxt, toNum(valTxt), detail]);
