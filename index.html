@@ -780,8 +780,15 @@ const URLS = {
   // OT_ATTENDANCE_CUTOVER onward (see parseAttendanceOT()).
   // Re-published 24 Sep 2026 from the tracker HR actually maintains (the
   // earlier links pointed at an old copy with a single Daily Entry row).
-  attendDaily:'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=634849101&single=true&output=csv',
-  attendHist: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=422945577&single=true&output=csv',
+  // 30 Oct 2026: tracker tabs were recreated (new gids). The published links
+  // are listed here unlabelled; identifyAttendanceSheets() tells Daily Entry
+  // (has an "Out next Day" column) from Historical Data (does not) by header,
+  // so a future tab re-creation only needs the new links pasted in this list.
+  attendTabs: [
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=1277227621&single=true&output=csv',
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=1138232631&single=true&output=csv',
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRiegi1IvGMWJ3ITH773F89sg7fFRuccQ5FNtF4V1M9F7wSR0-H0NB-kUw9TkSkGYZ2duPhm8RmwxP_/pub?gid=410443082&single=true&output=csv',
+  ],
 };
 
 // Cutover date: before this, OT/DOT is estimated from Labour Allocation totals
@@ -1986,6 +1993,26 @@ function getFiltered(){
   return SD.daily_totals.filter(d=>d.date>=from&&d.date<=to);
 }
 
+// ── IDENTIFY LABOUR ATTENDANCE TRACKER TABS ──────────────────────────────────
+// Given the rows of every published tracker tab, return {daily, hist}.
+// Attendance tabs have date + epf_no + normal_ot_hours columns; Daily Entry
+// also has out_next_day. Anything else (Print Document, dashboards) is ignored.
+function identifyAttendanceSheets(sets){
+  let daily=[], hist=[];
+  sets.forEach((rows,i)=>{
+    if(!rows || !rows.length) return;
+    const keys = Object.keys(rows[0]);
+    const isAttend = keys.includes('date') && keys.includes('epf_no') && keys.some(k=>k.startsWith('normal_ot'));
+    if(!isAttend){ console.log('Attendance tab', i, 'skipped (not an attendance sheet):', keys.slice(0,4).join(',')); return; }
+    if(keys.includes('out_next_day')){ daily = rows; console.log('Attendance tab', i, '= Daily Entry,', rows.length, 'rows'); }
+    else { hist = rows; console.log('Attendance tab', i, '= Historical Data,', rows.length, 'rows'); }
+  });
+  if(!daily.length) console.warn('Daily Entry tab not found among tracker links — check URLS.attendTabs');
+  identifyAttendanceSheets._last = {daily, hist};
+  return identifyAttendanceSheets._last;
+}
+identifyAttendanceSheets._last = {daily:[], hist:[]};
+
 // ── CONNECT ALL ───────────────────────────────────────────────────────────────
 let connectRequestId = 0;
 async function connectAll(){
@@ -2007,9 +2034,10 @@ async function connectAll(){
     fetchCSV(URLS.prodSrc),
     fetchCSV(URLS.qualityRej),
     fetchCSV(URLS.batch),
-    fetchCSV(URLS.attendDaily),
-    fetchCSV(URLS.attendHist),
+    Promise.all(URLS.attendTabs.map(fetchCSV)).then(identifyAttendanceSheets).then(x=>x.daily),
+    null,
   ]);
+  attendHistRows = identifyAttendanceSheets._last.hist;
 
   // Ignore stale responses if a newer request has started
   if(myRequestId !== connectRequestId) {
