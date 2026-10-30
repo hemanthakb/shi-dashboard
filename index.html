@@ -1670,15 +1670,27 @@ function setThisMonth(){const now=new Date();$('f-from').value=toInputDate(new D
 async function fetchCSV(url){
   if(!url)return[];
   try{
+    // Google's published-CSV links allow direct browser fetches, so always try
+    // direct first. corsproxy.io is only a fallback: its free tier rejects
+    // responses over ~1 MB, which silently blanked the Labour Attendance
+    // Tracker (Daily Entry ~1 MB, Historical ~3.6 MB) and the OT pace gauge.
     const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const fetchUrl = isLocal ? 'https://corsproxy.io/?' + encodeURIComponent(url + '&t=' + Date.now()) : url + '&t=' + Date.now();
-    // 15 second timeout per source
-    const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(), 15000);
-    const r=await fetch(fetchUrl,{cache:'no-store', signal:controller.signal});
-    clearTimeout(timeout);
-    if(!r.ok)throw new Error('HTTP '+r.status);
-    const txt=await r.text();
+    const bust = url + '&t=' + Date.now();
+    const attempts = isLocal ? [bust, 'https://corsproxy.io/?' + encodeURIComponent(bust)] : [bust];
+    let txt = null, lastErr = null;
+    for(const fetchUrl of attempts){
+      // 45 second timeout per attempt (tracker sheets are several MB)
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 45000);
+      try{
+        const r=await fetch(fetchUrl,{cache:'no-store', signal:controller.signal});
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        txt=await r.text();
+        break;
+      }catch(err){ lastErr = err; console.warn('CSV fetch attempt failed:', url.slice(-30), fetchUrl.startsWith('https://corsproxy') ? '(proxy)' : '(direct)', err && err.message); }
+      finally{ clearTimeout(timeout); }
+    }
+    if(txt === null) throw lastErr || new Error('fetch failed');
     const lines=txt.trim().split('\n');
     if(lines.length<2)return[];
     const parseRow=row=>{const res=[];let cur='',inQ=false;for(let i=0;i<row.length;i++){const ch=row[i];if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){res.push(cur.trim());cur='';}else cur+=ch;}res.push(cur.trim());return res;};
